@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -19,11 +19,28 @@ const defaultIcon = new L.Icon({
   popupAnchor: [1, -34],
 });
 
-function RecenterMap({ center }) {
+function FlyToCenter({ center }) {
+  const map = useMap();
+  const prevCenter = useRef(center);
+
+  useEffect(() => {
+    const [prevLat, prevLng] = prevCenter.current;
+    const [lat, lng] = center;
+    if (prevLat !== lat || prevLng !== lng) {
+      map.flyTo(center, map.getZoom(), { duration: 1.2, easeLinearity: 0.25 });
+      prevCenter.current = center;
+    }
+  }, [center, map]);
+
+  return null;
+}
+
+function InvalidateOnMount() {
   const map = useMap();
   useEffect(() => {
-    map.setView(center, map.getZoom());
-  }, [center, map]);
+    const timer = setTimeout(() => map.invalidateSize(), 100);
+    return () => clearTimeout(timer);
+  }, [map]);
   return null;
 }
 
@@ -33,13 +50,15 @@ export default function CameraMap({ center, cameras, activeCamId, onSelectCamera
       center={center}
       zoom={16}
       scrollWheelZoom={true}
+      zoomControl={false}
       style={{ width: "100%", height: "100%" }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/">OSM</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <RecenterMap center={center} />
+      <FlyToCenter center={center} />
+      <InvalidateOnMount />
       {cameras.map((cam) => {
         if (!cam.location) return null;
         const isActive = cam.id === activeCamId;
@@ -52,7 +71,13 @@ export default function CameraMap({ center, cameras, activeCamId, onSelectCamera
               click: () => onSelectCamera(cam),
             }}
           >
-            <Popup>{cam.name}</Popup>
+            <Popup>
+              <strong>{cam.name}</strong>
+              <br />
+              <span style={{ fontSize: "11px", opacity: 0.7 }}>
+                {cam.location.lat.toFixed(4)}, {cam.location.lng.toFixed(4)}
+              </span>
+            </Popup>
           </Marker>
         );
       })}
