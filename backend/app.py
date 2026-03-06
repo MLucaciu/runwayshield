@@ -20,6 +20,11 @@ CAMERA_CONFIG = {
         "name": "Runway Main",
         "location": {"lat": 47.0365, "lng": 21.9484},
     },
+    "camera_2": {
+        "url": "http://10.1.0.78:8080/video",
+        "name": "Runway Side",
+        "location": {"lat": 49.0365, "lng": 21.9484},
+    },
 }
 
 cameras: dict[str, CameraStream] = {}

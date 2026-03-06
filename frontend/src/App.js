@@ -78,7 +78,7 @@ function useTheme() {
 
 export default function App() {
   const [cameras, setCameras] = useState([]);
-  const [activeCam, setActiveCam] = useState(null);
+  const [activeCamId, setActiveCamId] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [liveAlerts, setLiveAlerts] = useState([]);
   const [backendOk, setBackendOk] = useState(null);
@@ -90,6 +90,8 @@ export default function App() {
   const [activeSegment, setActiveSegment] = useState(null);
   const imgRef = useRef(null);
   const vidRef = useRef(null);
+
+  const activeCam = cameras.find((c) => c.id === activeCamId) ?? null;
 
   const fetchData = useCallback(async () => {
     try {
@@ -107,16 +109,14 @@ export default function App() {
       setAlerts(alertData);
       setLiveAlerts(liveData);
       setBackendOk(statusData.status === "ok");
-      if (!activeCam && camData.length) {
-        setActiveCam(camData[0]);
-      } else if (activeCam) {
-        const refreshed = camData.find((c) => c.id === activeCam.id);
-        if (refreshed) setActiveCam(refreshed);
-      }
+      setActiveCamId((prev) => {
+        if (!prev && camData.length) return camData[0].id;
+        return prev;
+      });
     } catch {
       setBackendOk(false);
     }
-  }, [activeCam]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -125,14 +125,17 @@ export default function App() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!activeCam) {
+    if (!activeCamId) {
       setStreamSrc("");
       return;
     }
-    if (mode === "live" && !seekSeconds) {
-      setStreamSrc(`/api/stream/${activeCam.id}/live`);
+    if (mode === "live") {
+      const url = seekSeconds > 0
+        ? `/api/stream/${activeCamId}/live?offset=${seekSeconds}`
+        : `/api/stream/${activeCamId}/live`;
+      setStreamSrc(url);
     }
-  }, [activeCam, mode, seekSeconds]);
+  }, [activeCamId, mode, seekSeconds]);
 
   const goLive = () => {
     setMode("live");
@@ -142,13 +145,10 @@ export default function App() {
       vidRef.current.pause();
       vidRef.current.removeAttribute("src");
     }
-    if (activeCam) {
-      setStreamSrc(`/api/stream/${activeCam.id}/live`);
-    }
   };
 
   const seekBack = (seconds) => {
-    if (!activeCam) return;
+    if (!activeCamId) return;
     setActiveSegment(null);
 
     if (seconds <= 30) {
@@ -158,30 +158,27 @@ export default function App() {
         vidRef.current.pause();
         vidRef.current.removeAttribute("src");
       }
-      const url = seconds > 0
-        ? `/api/stream/${activeCam.id}/live?offset=${seconds}`
-        : `/api/stream/${activeCam.id}/live`;
-      setStreamSrc(url);
     } else {
       setMode("history");
       setSeekSeconds(seconds);
       const t = (Date.now() / 1000) - seconds;
-      setStreamSrc(`/api/stream/${activeCam.id}/history?t=${t}`);
+      setStreamSrc(`/api/stream/${activeCamId}/history?t=${t}`);
     }
   };
 
   const playSegment = (segName) => {
-    if (!activeCam) return;
+    if (!activeCamId) return;
     setMode("history");
     setActiveSegment(segName);
     setSeekSeconds(0);
     const segDate = parseSegmentTimestamp(segName);
     const t = segDate.getTime() / 1000;
-    setStreamSrc(`/api/stream/${activeCam.id}/history?t=${t}`);
+    setStreamSrc(`/api/stream/${activeCamId}/history?t=${t}`);
   };
 
   const handleCamSwitch = (cam) => {
-    setActiveCam(cam);
+    if (cam.id === activeCamId) return;
+    setActiveCamId(cam.id);
     goLive();
   };
 
