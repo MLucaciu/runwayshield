@@ -115,11 +115,66 @@ After user validation, actions per severity:
   - Alert feed updates
 - **Evidence linking**: notifications store `source` + `timestamp_start`/`timestamp_end`; the UI resolves this to the correct video stream for playback
 
-## 8. Storage
+## 8. Video Storage & Playback
 
-- **SQLite**: notifications, detection metadata, sensor readings, map coordinates
-- **Filesystem**: video segments stored by camera and time
-- **Playback**: UI requests video by `source` + timestamp range from a video endpoint
+Two-layer design to support both near-live rewind and historical playback:
+
+### Layer 1 — In-memory ring buffer (near-live rewind)
+- `collections.deque` per camera holding the last **30 seconds** of frames
+- Each entry: `(timestamp, jpeg_bytes)` — pre-encoded JPEG for fast serving
+- ~900 frames at 30fps, ~45MB per camera
+- When user seeks back 1-30s from live, frames are served from this buffer as an MJPEG burst
+- No disk I/O, instant response
+
+### Layer 2 — Disk segments (historical playback)
+- OpenCV `VideoWriter` writes **30-second MP4 chunks** per camera
+- **Both raw and annotated** video saved:
+  - Raw: `videos/{camera_id}/raw/{timestamp_start}.mp4`
+  - Annotated: `videos/{camera_id}/annotated/{timestamp_start}.mp4`
+- When a segment completes (30s elapsed), the writer finalizes it and starts a new one
+- For playback, UI resolves `camera_id` + `timestamp` → correct segment file
+
+### Annotations (SQLite)
+
+`detections` table — decoupled from video files:
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | integer PK | Auto-increment |
+| `camera_id` | string | `camera_1`, `camera_2`, etc. |
+| `timestamp` | datetime | Frame timestamp |
+| `frame_number` | integer | Frame index within the segment |
+| `detections_json` | JSON | Array of `{class, confidence, bbox, track_id, mask_polygon}` |
+
+This allows the UI to re-render annotations on raw video during playback, or play the pre-annotated version directly.
+
+### Video API endpoints
+
+- `GET /api/stream/<camera_id>/live` — MJPEG live stream (annotated)
+- `GET /api/stream/<camera_id>/playback?from=<ts>&to=<ts>&type=raw|annotated` — unified playback endpoint. Backend transparently resolves the source:
+  - If `from` is within last 30s → serve from ring buffer
+  - If `from` is older → serve from disk segments
+  - If range spans both → stitch buffer + disk seamlessly
+  - Response format is the same regardless of source (MJPEG stream)
+
+### Processing flow
+
+```
+IP Camera (MJPEG)
+  → OpenCV reader thread (MJPEGCamera)
+  → YOLO .track(frame) → annotated frame
+  → ring buffer (deque, 30s)
+  → VideoWriter (raw 30s MP4 chunk → disk)
+  → VideoWriter (annotated 30s MP4 chunk → disk)
+  → MJPEG live stream endpoint
+  → insert detection metadata → SQLite
+  → emit Socket.IO event (if notification triggered)
+```
+
+## 9. Metadata Storage
+
+- **SQLite**: notifications, detections (per-frame), sensor readings, map coordinates
+- **Filesystem**: video segments (`videos/{camera_id}/{raw|annotated}/{timestamp}.mp4`)
 
 ## 9. Map & Heatmap
 

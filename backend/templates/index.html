@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Runway Shield</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+
+    .header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 24px; background: #1e293b; border-bottom: 1px solid #334155;
+    }
+    .header h1 { font-size: 20px; font-weight: 600; }
+
+    .container { max-width: 960px; margin: 24px auto; padding: 0 24px; }
+
+    .camera-select {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    }
+    .camera-select select {
+      background: #1e293b; color: #e2e8f0; border: 1px solid #475569;
+      padding: 8px 12px; border-radius: 6px; font-size: 14px;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+    }
+    .status-dot.live { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .status-dot.off  { background: #ef4444; }
+
+    .video-wrapper {
+      position: relative; background: #000; border-radius: 8px; overflow: hidden;
+      aspect-ratio: 16/9; margin-bottom: 16px;
+    }
+    .video-wrapper img {
+      width: 100%; height: 100%; object-fit: contain; display: block;
+    }
+    .video-wrapper .overlay {
+      position: absolute; top: 12px; left: 12px;
+      background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 4px;
+      font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+    }
+    .overlay.live-badge { color: #f87171; }
+    .overlay.playback-badge { color: #60a5fa; }
+
+    .controls {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .controls button {
+      background: #334155; color: #e2e8f0; border: 1px solid #475569;
+      padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      transition: background 0.15s;
+    }
+    .controls button:hover { background: #475569; }
+    .controls button.active { background: #3b82f6; border-color: #3b82f6; }
+
+    .seek-group {
+      display: flex; align-items: center; gap: 6px;
+      background: #1e293b; border: 1px solid #475569; border-radius: 6px;
+      padding: 4px 8px;
+    }
+    .seek-group label { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+    .seek-group input[type=range] { width: 140px; accent-color: #3b82f6; }
+    .seek-group .seek-val { font-size: 12px; min-width: 30px; text-align: right; }
+
+    .segments {
+      background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+      padding: 16px; margin-top: 16px;
+    }
+    .segments h3 { font-size: 14px; margin-bottom: 8px; color: #94a3b8; }
+    .segments ul { list-style: none; }
+    .segments li {
+      padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px;
+      font-family: monospace;
+    }
+    .segments li:hover { background: #334155; }
+    .segments li.active { background: #1e40af; }
+    .segments .empty { color: #64748b; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="32" height="32">
+      <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#1e40af"/></linearGradient></defs>
+      <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="url(#sg)" stroke="#60a5fa" stroke-width="1.5"/>
+      <path d="M32 18 L24 30 H30 V42 H34 V30 H40 Z" fill="white" opacity="0.9"/>
+    </svg>
+    <h1>Runway Shield</h1>
+  </div>
+
+  <div class="container">
+    <div class="camera-select">
+      <select id="cameraSelect"></select>
+      <span class="status-dot off" id="statusDot"></span>
+      <span id="statusText" style="font-size:13px; color:#94a3b8;">Disconnected</span>
+    </div>
+
+    <div class="video-wrapper">
+      <img id="videoFeed" alt="No feed" src="">
+      <div class="overlay live-badge" id="modeBadge">LIVE</div>
+    </div>
+
+    <div class="controls">
+      <button id="btnLive" class="active">Live</button>
+      <button id="btnBack5">-5s</button>
+      <button id="btnBack10">-10s</button>
+      <button id="btnBack30">-30s</button>
+      <div class="seek-group">
+        <label>Rewind</label>
+        <input type="range" id="seekSlider" min="0" max="30" value="0" step="1">
+        <span class="seek-val" id="seekVal">0s</span>
+      </div>
+    </div>
+
+    <div class="segments">
+      <h3>Recorded segments</h3>
+      <ul id="segmentList"><li class="empty">No segments yet</li></ul>
+    </div>
+  </div>
+
+  <script>
+    const videoFeed = document.getElementById("videoFeed");
+    const cameraSelect = document.getElementById("cameraSelect");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const modeBadge = document.getElementById("modeBadge");
+    const segmentList = document.getElementById("segmentList");
+    const seekSlider = document.getElementById("seekSlider");
+    const seekVal = document.getElementById("seekVal");
+    const btnLive = document.getElementById("btnLive");
+
+    let currentCamera = null;
+    let mode = "live"; // "live" | "playback"
+
+    // ---- Camera list ----
+    async function loadCameras() {
+      try {
+        const resp = await fetch("/api/cameras");
+        const data = await resp.json();
+        cameraSelect.innerHTML = "";
+        const ids = Object.keys(data);
+        if (ids.length === 0) {
+          cameraSelect.innerHTML = '<option>No cameras</option>';
+          return;
+        }
+        ids.forEach(id => {
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = id;
+          cameraSelect.appendChild(opt);
+        });
+        currentCamera = ids[0];
+        goLive();
+        loadSegments();
+      } catch (e) {
+        statusText.textContent = "Backend offline";
+      }
+    }
+
+    // ---- Live mode ----
+    function goLive() {
+      if (!currentCamera) return;
+      mode = "live";
+      videoFeed.src = `/api/stream/${currentCamera}/live`;
+      statusDot.className = "status-dot live";
+      statusText.textContent = "Live";
+      modeBadge.textContent = "LIVE";
+      modeBadge.className = "overlay live-badge";
+      seekSlider.value = 0;
+      seekVal.textContent = "0s";
+      setActiveButton(btnLive);
+    }
+
+    // ---- Playback mode ----
+    function seekBack(seconds) {
+      if (!currentCamera) return;
+      mode = "playback";
+      const now = new Date();
+      const from = new Date(now.getTime() - seconds * 1000);
+      const to = new Date(now.getTime());
+      const params = `from=${from.toISOString()}&to=${to.toISOString()}`;
+      videoFeed.src = `/api/stream/${currentCamera}/playback?${params}`;
+      statusDot.className = "status-dot live";
+      statusText.textContent = `Playback -${seconds}s`;
+      modeBadge.textContent = `-${seconds}s`;
+      modeBadge.className = "overlay playback-badge";
+    }
+
+    function playSegment(segName) {
+      if (!currentCamera) return;
+      mode = "playback";
+      // Parse timestamp from segment name: 20260306T140200Z.mp4
+      const tsStr = segName.replace(".mp4", "").replace("Z", "");
+      const y = tsStr.slice(0,4), mo = tsStr.slice(4,6), d = tsStr.slice(6,8);
+      const h = tsStr.slice(9,11), mi = tsStr.slice(11,13), s = tsStr.slice(13,15);
+      const from = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}Z`);
+      const to = new Date(from.getTime() + 30000);
+      const params = `from=${from.toISOString()}&to=${to.toISOString()}`;
+      videoFeed.src = `/api/stream/${currentCamera}/playback?${params}`;
+      statusDot.className = "status-dot live";
+      statusText.textContent = `Segment ${segName}`;
+      modeBadge.textContent = "REC";
+      modeBadge.className = "overlay playback-badge";
+    }
+
+    // ---- Segments list ----
+    async function loadSegments() {
+      if (!currentCamera) return;
+      try {
+        const resp = await fetch("/api/cameras");
+        const data = await resp.json();
+        const cam = data[currentCamera];
+        if (!cam || !cam.segments || cam.segments.length === 0) {
+          segmentList.innerHTML = '<li class="empty">No segments yet</li>';
+          return;
+        }
+        segmentList.innerHTML = "";
+        cam.segments.reverse().forEach(seg => {
+          const li = document.createElement("li");
+          li.textContent = seg;
+          li.addEventListener("click", () => {
+            document.querySelectorAll("#segmentList li").forEach(l => l.classList.remove("active"));
+            li.classList.add("active");
+            playSegment(seg);
+          });
+          segmentList.appendChild(li);
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    // ---- UI helpers ----
+    function setActiveButton(btn) {
+      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    }
+
+    // ---- Event listeners ----
+    cameraSelect.addEventListener("change", () => {
+      currentCamera = cameraSelect.value;
+      goLive();
+      loadSegments();
+    });
+
+    btnLive.addEventListener("click", () => goLive());
+
+    document.getElementById("btnBack5").addEventListener("click", function() {
+      seekBack(5); seekSlider.value = 5; seekVal.textContent = "5s"; setActiveButton(this);
+    });
+    document.getElementById("btnBack10").addEventListener("click", function() {
+      seekBack(10); seekSlider.value = 10; seekVal.textContent = "10s"; setActiveButton(this);
+    });
+    document.getElementById("btnBack30").addEventListener("click", function() {
+      seekBack(30); seekSlider.value = 30; seekVal.textContent = "30s"; setActiveButton(this);
+    });
+
+    seekSlider.addEventListener("input", () => {
+      const val = parseInt(seekSlider.value);
+      seekVal.textContent = `${val}s`;
+      if (val === 0) {
+        goLive();
+      } else {
+        seekBack(val);
+        document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+      }
+    });
+
+    // Refresh segment list periodically
+    setInterval(loadSegments, 10000);
+
+    // Init
+    loadCameras();
+  </script>
+</body>
+</html>
