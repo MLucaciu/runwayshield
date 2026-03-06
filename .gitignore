@@ -15,7 +15,6 @@ frontend/.env.local
 
 # IDE
 .idea/
-.vscode/
 *.swp
 
 # OS
