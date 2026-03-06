@@ -25,6 +25,11 @@ CAMERA_CONFIG = {
         "name": "Runway Side",
         "location": {"lat": 49.0365, "lng": 21.9484},
     },
+    "camera_2": {
+        "url": os.environ.get("CAMERA_2_URL", "0"),
+        "name": "Runway Main 2",
+        "location": {"lat": 47.0365, "lng": 21.9484},
+    },
 }
 
 cameras: dict[str, CameraStream] = {}
