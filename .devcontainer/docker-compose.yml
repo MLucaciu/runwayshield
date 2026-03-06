@@ -3,9 +3,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    privileged: true
     volumes:
       - ..:/workspace:cached
     ports:
       - "3000:3000"
       - "5000:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - CAMERA_1_URL=http://host.docker.internal:9000/stream
     command: sleep infinity

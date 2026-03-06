@@ -6,10 +6,94 @@
   box-sizing: border-box;
 }
 
+/* ── Dark theme (default) ──────────────────────────────────────── */
+:root {
+  --bg-app: #0c111b;
+  --bg-panel: #0f172a;
+  --bg-header: rgba(15, 23, 42, 0.92);
+  --bg-stream: #0a0f1a;
+  --bg-sidebar: rgba(30, 41, 59, 0.3);
+  --bg-grid-gap: rgba(30, 41, 59, 0.3);
+  --bg-controls: rgba(15, 23, 42, 0.95);
+  --bg-ctrl-btn: rgba(30, 41, 59, 0.5);
+  --bg-ctrl-btn-hover: #334155;
+  --bg-alert-card: rgba(30, 41, 59, 0.4);
+  --bg-alert-card-hover: rgba(30, 41, 59, 0.65);
+  --bg-alert-card-active: rgba(30, 41, 59, 0.55);
+  --bg-summary-item: #0f172a;
+  --bg-scrollbar-thumb: rgba(100, 116, 139, 0.3);
+  --bg-scrollbar-thumb-hover: rgba(100, 116, 139, 0.5);
+  --bg-map: #0a0f1a;
+
+  --border-accent: rgba(59, 130, 246, 0.12);
+  --border-accent-subtle: rgba(59, 130, 246, 0.08);
+  --border-ctrl: #334155;
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-dim: #475569;
+
+  --accent-blue: #3b82f6;
+  --accent-blue-light: #60a5fa;
+  --accent-blue-bg: rgba(59, 130, 246, 0.1);
+  --accent-blue-bg-strong: rgba(59, 130, 246, 0.2);
+  --accent-blue-bg-segment: rgba(59, 130, 246, 0.18);
+  --count-bg: rgba(100, 116, 139, 0.2);
+
+  --thumb-bg: #0a0f1a;
+  --thumb-border: rgba(59, 130, 246, 0.08);
+  --cam-thumb-active-bg: #1e293b;
+  --cam-thumb-hover-bg: #1e293b;
+  --segment-hover-bg: #1e293b;
+}
+
+/* ── Light theme ───────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-app: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-header: rgba(255, 255, 255, 0.92);
+  --bg-stream: #e2e8f0;
+  --bg-sidebar: #f1f5f9;
+  --bg-grid-gap: #e2e8f0;
+  --bg-controls: rgba(255, 255, 255, 0.95);
+  --bg-ctrl-btn: rgba(241, 245, 249, 0.8);
+  --bg-ctrl-btn-hover: #e2e8f0;
+  --bg-alert-card: rgba(241, 245, 249, 0.7);
+  --bg-alert-card-hover: rgba(226, 232, 240, 0.7);
+  --bg-alert-card-active: rgba(226, 232, 240, 0.85);
+  --bg-summary-item: #ffffff;
+  --bg-scrollbar-thumb: rgba(100, 116, 139, 0.25);
+  --bg-scrollbar-thumb-hover: rgba(100, 116, 139, 0.45);
+  --bg-map: #e2e8f0;
+
+  --border-accent: rgba(59, 130, 246, 0.18);
+  --border-accent-subtle: rgba(59, 130, 246, 0.12);
+  --border-ctrl: #cbd5e1;
+
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+
+  --accent-blue: #3b82f6;
+  --accent-blue-light: #2563eb;
+  --accent-blue-bg: rgba(59, 130, 246, 0.08);
+  --accent-blue-bg-strong: rgba(59, 130, 246, 0.15);
+  --accent-blue-bg-segment: rgba(59, 130, 246, 0.12);
+  --count-bg: rgba(100, 116, 139, 0.15);
+
+  --thumb-bg: #f1f5f9;
+  --thumb-border: rgba(59, 130, 246, 0.12);
+  --cam-thumb-active-bg: #e2e8f0;
+  --cam-thumb-hover-bg: #f1f5f9;
+  --segment-hover-bg: #f1f5f9;
+}
+
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--bg-panel);
+  color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }

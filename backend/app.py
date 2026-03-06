@@ -13,28 +13,59 @@ CORS(app)
 # ---------------------------------------------------------------------------
 # Camera registry
 # ---------------------------------------------------------------------------
-# Configure cameras here.  Each key is the camera_id used in API URLs.
-# Set CAMERA_<ID>_URL env vars, or edit this dict directly.
 CAMERA_CONFIG = {
-    "camera_1": os.environ.get("CAMERA_1_URL", "0"),  # "0" = local webcam
+    "camera_1": {
+        "url": os.environ.get("CAMERA_1_URL", "0"),
+        "name": "Runway Main",
+        "location": {"lat": 47.0365, "lng": 21.9484},
+    },
 }
 
 cameras: dict[str, CameraStream] = {}
+_cameras_started = False
 
 
 def start_cameras():
-    for cam_id, url in CAMERA_CONFIG.items():
-        cam = CameraStream(camera_id=cam_id, url=url, video_dir="videos")
+    global _cameras_started
+    if _cameras_started:
+        return
+    _cameras_started = True
+    for cam_id, cfg in CAMERA_CONFIG.items():
+        cam = CameraStream(camera_id=cam_id, url=cfg["url"], video_dir="videos")
         try:
             cam.start()
             cameras[cam_id] = cam
-            print(f"[camera] {cam_id} started ({url})")
+            print(f"[camera] {cam_id} started ({cfg['url']})")
         except ConnectionError as e:
             print(f"[camera] {cam_id} failed to start: {e}")
 
 
+# When Werkzeug's debug reloader is active, the module is imported twice: once in
+# the watcher parent and once in the child that serves (WERKZEUG_RUN_MAIN="true").
+# Only open cameras in the serving process to avoid double-grabbing the source.
+@app.before_request
+def _ensure_cameras():
+    start_cameras()
+
+
+def _camera_json(cam_id):
+    """Build the camera object the React frontend expects."""
+    cfg = CAMERA_CONFIG.get(cam_id, {})
+    cam = cameras.get(cam_id)
+    online = cam is not None
+    return {
+        "id": cam_id,
+        "name": cfg.get("name", cam_id),
+        "stream_url": f"/api/stream/{cam_id}/live",
+        "online": online,
+        "location": cfg.get("location"),
+        "buffer_start": cam.buffer_start_time().isoformat() if cam and cam.buffer_start_time() else None,
+        "segments": cam.list_segments() if cam else [],
+    }
+
+
 # ---------------------------------------------------------------------------
-# Index
+# Index (Jinja2 template fallback)
 # ---------------------------------------------------------------------------
 
 @app.route("/")
@@ -51,26 +82,34 @@ def status():
     return jsonify({
         "message": "Runway Shield is online. All systems operational.",
         "status": "ok",
-        "cameras": {
-            cam_id: {"url": cam.url} for cam_id, cam in cameras.items()
-        },
+        "cameras": {cam_id: {"url": CAMERA_CONFIG[cam_id]["url"]} for cam_id in cameras},
     })
 
 
 # ---------------------------------------------------------------------------
-# Camera list
+# Camera list — returns JSON array for the React frontend
 # ---------------------------------------------------------------------------
 
 @app.route("/api/cameras")
 def list_cameras():
-    return jsonify({
-        cam_id: {
-            "url": cam.url,
-            "buffer_start": cam.buffer_start_time().isoformat() if cam.buffer_start_time() else None,
-            "segments": cam.list_segments(),
-        }
-        for cam_id, cam in cameras.items()
-    })
+    result = []
+    for cam_id in CAMERA_CONFIG:
+        result.append(_camera_json(cam_id))
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# Notifications (stub endpoints the React dashboard calls)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/notifications/history")
+def notifications_history():
+    return jsonify([])
+
+
+@app.route("/api/notifications/live")
+def notifications_live():
+    return jsonify([])
 
 
 # ---------------------------------------------------------------------------
@@ -128,16 +167,14 @@ def playback(camera_id):
                             mimetype="multipart/x-mixed-replace; boundary=frame")
 
     # Fall back to disk segment
-    target_prefix = from_ts.strftime("%Y%m%dT")
     for seg_name in cam.list_segments():
-        # Segment name: 20260306T140200Z.mp4 — find the one covering from_ts
         seg_ts_str = seg_name.replace(".mp4", "").rstrip("Z")
         try:
             seg_ts = datetime.strptime(seg_ts_str, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
         except ValueError:
             continue
         seg_end = seg_ts + timedelta(seconds=cam.segment_seconds)
-        if seg_ts <= from_ts and from_ts <= seg_end:
+        if seg_ts <= from_ts <= seg_end:
             path = cam.segment_path(seg_name)
             if os.path.isfile(path):
                 return send_file(path, mimetype="video/mp4")
@@ -150,5 +187,4 @@ def playback(camera_id):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    start_cameras()
-    app.run(host="0.0.0.0", port=8081, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)

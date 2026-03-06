@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import ShieldIcon from "./ShieldIcon";
 import CameraMap from "./CameraMap";
 import "./App.css";
@@ -18,12 +18,78 @@ function timeAgo(iso) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
 }
 
+function parseSegmentTimestamp(name) {
+  const ts = name.replace(".mp4", "").replace("Z", "");
+  const y = ts.slice(0, 4), mo = ts.slice(4, 6), d = ts.slice(6, 8);
+  const h = ts.slice(9, 11), mi = ts.slice(11, 13), s = ts.slice(13, 15);
+  return new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}Z`);
+}
+
+function formatSegmentTime(name) {
+  try {
+    const d = parseSegmentTimestamp(name);
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch {
+    return name;
+  }
+}
+
+function SunIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5" />
+      <line x1="12" y1="1" x2="12" y2="3" />
+      <line x1="12" y1="21" x2="12" y2="23" />
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+      <line x1="1" y1="12" x2="3" y2="12" />
+      <line x1="21" y1="12" x2="23" y2="12" />
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    const stored = localStorage.getItem("rws-theme");
+    return stored || "dark";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("rws-theme", theme);
+  }, [theme]);
+
+  const toggle = useCallback(() => {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  }, []);
+
+  return [theme, toggle];
+}
+
 export default function App() {
   const [cameras, setCameras] = useState([]);
   const [activeCam, setActiveCam] = useState(null);
   const [alerts, setAlerts] = useState([]);
   const [liveAlerts, setLiveAlerts] = useState([]);
   const [backendOk, setBackendOk] = useState(null);
+  const [theme, toggleTheme] = useTheme();
+
+  // Playback state
+  const [mode, setMode] = useState("live"); // "live" | "playback"
+  const [seekSeconds, setSeekSeconds] = useState(0);
+  const [streamSrc, setStreamSrc] = useState("");
+  const [activeSegment, setActiveSegment] = useState(null);
+  const imgRef = useRef(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -53,11 +119,56 @@ export default function App() {
     return () => clearInterval(iv);
   }, [fetchData]);
 
-  const activeLocation = activeCam?.location ?? { lat: 47.0365, lng: 21.9484 };
+  // Build stream source URL whenever camera or mode changes
+  useEffect(() => {
+    if (!activeCam) {
+      setStreamSrc("");
+      return;
+    }
+    if (mode === "live") {
+      setStreamSrc(`/api/stream/${activeCam.id}/live`);
+    }
+  }, [activeCam, mode]);
 
+  const goLive = () => {
+    setMode("live");
+    setSeekSeconds(0);
+    setActiveSegment(null);
+  };
+
+  const seekBack = (seconds) => {
+    if (!activeCam) return;
+    setMode("playback");
+    setSeekSeconds(seconds);
+    setActiveSegment(null);
+    const now = new Date();
+    const from = new Date(now.getTime() - seconds * 1000);
+    setStreamSrc(
+      `/api/stream/${activeCam.id}/playback?from=${from.toISOString()}&to=${now.toISOString()}`
+    );
+  };
+
+  const playSegment = (segName) => {
+    if (!activeCam) return;
+    setMode("playback");
+    setActiveSegment(segName);
+    const from = parseSegmentTimestamp(segName);
+    const to = new Date(from.getTime() + 30000);
+    setStreamSrc(
+      `/api/stream/${activeCam.id}/playback?from=${from.toISOString()}&to=${to.toISOString()}`
+    );
+  };
+
+  const handleCamSwitch = (cam) => {
+    setActiveCam(cam);
+    goLive();
+  };
+
+  const activeLocation = activeCam?.location ?? { lat: 47.0365, lng: 21.9484 };
   const alertsForCam = liveAlerts.filter(
     (a) => a.source === activeCam?.id || a.type === "environment"
   );
+  const segments = activeCam?.segments ?? [];
 
   return (
     <div className="app">
@@ -68,6 +179,14 @@ export default function App() {
           <span className="logo-text">Runway Shield</span>
         </div>
         <div className="header-right">
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+          </button>
           <span className={`status-dot ${backendOk ? "green" : backendOk === false ? "red" : ""}`} />
           <span className="status-label">
             {backendOk === null ? "Connecting…" : backendOk ? "Systems Online" : "Offline"}
@@ -77,50 +196,44 @@ export default function App() {
 
       {/* ── Main Grid ──────────────────────────────────────── */}
       <main className="dashboard">
-        {/* LEFT COLUMN — big stream + alert bar + camera thumbnails */}
+        {/* LEFT COLUMN — stream + controls + segments */}
         <section className="panel stream-panel">
           <div className="panel-header">
             <span className="panel-title">Camera view</span>
-            {activeCam && (
-              <span className="panel-badge">{activeCam.name}</span>
-            )}
+            <div className="panel-header-right">
+              {activeCam && <span className="panel-badge">{activeCam.name}</span>}
+              <span className={`mode-badge ${mode === "live" ? "mode-live" : "mode-playback"}`}>
+                {mode === "live" ? "LIVE" : seekSeconds ? `-${seekSeconds}s` : "REC"}
+              </span>
+            </div>
           </div>
 
           <div className="stream-area">
             <div className="stream-main">
-              {activeCam?.online ? (
+              {activeCam?.online && streamSrc ? (
                 <img
+                  ref={imgRef}
                   className="stream-img"
-                  src={activeCam.stream_url}
+                  src={streamSrc}
                   alt={activeCam.name}
                 />
               ) : (
                 <div className="stream-offline">
                   <ShieldIcon size={48} />
-                  <p>
-                    {activeCam
-                      ? "Camera feed unavailable"
-                      : "No cameras configured"}
-                  </p>
+                  <p>{activeCam ? "Camera feed unavailable" : "No cameras configured"}</p>
                 </div>
               )}
 
-              {/* Alert ticker under the stream */}
+              {/* Alert ticker */}
               <div className="alert-ticker">
                 {alertsForCam.length > 0 ? (
                   alertsForCam.map((a) => {
                     const sev = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.low;
                     return (
-                      <span
-                        key={a.id}
-                        className="ticker-item"
-                        style={{ borderColor: sev.color, background: sev.bg }}
-                      >
+                      <span key={a.id} className="ticker-item" style={{ borderColor: sev.color, background: sev.bg }}>
                         <span className="ticker-dot" style={{ background: sev.color }} />
                         <span className="ticker-class">{a.classification}</span>
-                        <span className="ticker-sev" style={{ color: sev.color }}>
-                          {sev.label}
-                        </span>
+                        <span className="ticker-sev" style={{ color: sev.color }}>{sev.label}</span>
                       </span>
                     );
                   })
@@ -128,27 +241,90 @@ export default function App() {
                   <span className="ticker-clear">No active alerts</span>
                 )}
               </div>
+
+              {/* ── Playback controls ── */}
+              <div className="playback-controls">
+                <button
+                  className={`ctrl-btn ${mode === "live" ? "ctrl-active" : ""}`}
+                  onClick={goLive}
+                >
+                  <span className="ctrl-live-dot" />
+                  Live
+                </button>
+                <div className="ctrl-divider" />
+                {[5, 10, 30].map((s) => (
+                  <button
+                    key={s}
+                    className={`ctrl-btn ${mode === "playback" && seekSeconds === s && !activeSegment ? "ctrl-active" : ""}`}
+                    onClick={() => seekBack(s)}
+                  >
+                    -{s}s
+                  </button>
+                ))}
+                <div className="ctrl-divider" />
+                <div className="ctrl-seek">
+                  <label className="ctrl-seek-label">Rewind</label>
+                  <input
+                    type="range"
+                    className="ctrl-slider"
+                    min="0"
+                    max="30"
+                    step="1"
+                    value={mode === "live" ? 0 : seekSeconds}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (v === 0) goLive();
+                      else seekBack(v);
+                    }}
+                  />
+                  <span className="ctrl-seek-val">{mode === "live" ? 0 : seekSeconds}s</span>
+                </div>
+              </div>
             </div>
 
-            <div className="cam-thumbs">
-              {cameras.map((cam) => (
-                <button
-                  key={cam.id}
-                  className={`cam-thumb ${cam.id === activeCam?.id ? "active" : ""}`}
-                  onClick={() => setActiveCam(cam)}
-                >
-                  <div className="thumb-preview">
-                    {cam.online ? (
-                      <img src={cam.stream_url} alt={cam.name} />
-                    ) : (
-                      <div className="thumb-off">
-                        <ShieldIcon size={20} />
-                      </div>
-                    )}
-                  </div>
-                  <span className="thumb-label">{cam.name}</span>
-                </button>
-              ))}
+            {/* Camera thumbnails sidebar */}
+            <div className="cam-sidebar">
+              <div className="cam-thumbs">
+                {cameras.map((cam) => (
+                  <button
+                    key={cam.id}
+                    className={`cam-thumb ${cam.id === activeCam?.id ? "active" : ""}`}
+                    onClick={() => handleCamSwitch(cam)}
+                  >
+                    <div className="thumb-preview">
+                      {cam.online ? (
+                        <img src={cam.stream_url} alt={cam.name} />
+                      ) : (
+                        <div className="thumb-off">
+                          <ShieldIcon size={20} />
+                        </div>
+                      )}
+                    </div>
+                    <span className="thumb-label">{cam.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Recorded segments list */}
+              <div className="segments-box">
+                <div className="segments-title">Recordings</div>
+                <div className="segments-list">
+                  {segments.length === 0 ? (
+                    <div className="segments-empty">No segments yet</div>
+                  ) : (
+                    [...segments].reverse().map((seg) => (
+                      <button
+                        key={seg}
+                        className={`segment-item ${activeSegment === seg ? "segment-active" : ""}`}
+                        onClick={() => playSegment(seg)}
+                      >
+                        <span className="segment-dot" />
+                        <span className="segment-time">{formatSegmentTime(seg)}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -173,24 +349,17 @@ export default function App() {
                   style={{ borderLeftColor: sev.color }}
                 >
                   <div className="alert-top">
-                    <span
-                      className="alert-severity"
-                      style={{ color: sev.color, background: sev.bg }}
-                    >
+                    <span className="alert-severity" style={{ color: sev.color, background: sev.bg }}>
                       {sev.label}
                     </span>
-                    <span className="alert-time">
-                      {timeAgo(a.timestamp_start)}
-                    </span>
+                    <span className="alert-time">{timeAgo(a.timestamp_start)}</span>
                   </div>
                   <div className="alert-body">
                     <span className="alert-class">{a.classification}</span>
                     <span className="alert-source">{a.source}</span>
                   </div>
                   <div className="alert-bottom">
-                    <span className={`alert-status status-${a.status}`}>
-                      {a.status}
-                    </span>
+                    <span className={`alert-status status-${a.status}`}>{a.status}</span>
                     {active && <span className="alert-live-dot" />}
                   </div>
                 </div>
@@ -209,7 +378,7 @@ export default function App() {
               center={[activeLocation.lat, activeLocation.lng]}
               cameras={cameras}
               activeCamId={activeCam?.id}
-              onSelectCamera={(cam) => setActiveCam(cam)}
+              onSelectCamera={(cam) => handleCamSwitch(cam)}
             />
           </div>
         </section>
@@ -225,13 +394,11 @@ export default function App() {
               <span className="summary-label">Cameras</span>
             </div>
             <div className="summary-item">
-              <span className="summary-value">{cameras.filter(c => c.online).length}</span>
+              <span className="summary-value">{cameras.filter((c) => c.online).length}</span>
               <span className="summary-label">Online</span>
             </div>
             <div className="summary-item severe">
-              <span className="summary-value">
-                {liveAlerts.filter(a => a.severity === "severe").length}
-              </span>
+              <span className="summary-value">{liveAlerts.filter((a) => a.severity === "severe").length}</span>
               <span className="summary-label">Severe</span>
             </div>
             <div className="summary-item">

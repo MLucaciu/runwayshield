@@ -41,11 +41,17 @@ class CameraStream:
         self._running = False
         self._thread = None
 
-    def start(self):
-        # Support integer device index (e.g. "0" for local webcam)
+    def start(self, retries=3, retry_delay=2):
         source = int(self.url) if self.url.isdigit() else self.url
-        self._cap = cv2.VideoCapture(source)
-        if not self._cap.isOpened():
+        for attempt in range(retries):
+            self._cap = cv2.VideoCapture(source)
+            if self._cap.isOpened():
+                break
+            self._cap.release()
+            if attempt < retries - 1:
+                print(f"[camera] {self.camera_id} open failed, retrying in {retry_delay}s… ({attempt + 1}/{retries})")
+                time.sleep(retry_delay)
+        else:
             raise ConnectionError(f"Cannot open camera {self.camera_id} at {self.url}")
         self._running = True
         self._thread = threading.Thread(target=self._capture_loop, daemon=True)
