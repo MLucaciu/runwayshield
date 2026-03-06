@@ -1,10 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#3b82f6"/>
-      <stop offset="100%" stop-color="#1e40af"/>
+    <clipPath id="fl">
+      <rect x="0" y="0" width="32" height="64" />
+    </clipPath>
+    <clipPath id="fr">
+      <rect x="32" y="0" width="32" height="64" />
+    </clipPath>
+    <linearGradient id="fg" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="#5dd8ec" />
+      <stop offset="100%" stop-color="#1494a8" />
     </linearGradient>
   </defs>
-  <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="url(#g)" stroke="#1e3a5f" stroke-width="1.5"/>
-  <path d="M32 18 L24 30 H30 V42 H34 V30 H40 Z" fill="white" opacity="0.9"/>
+  <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="url(#fg)" clip-path="url(#fl)" />
+  <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="white" clip-path="url(#fr)" />
+  <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="none" stroke="#5dd8ec" stroke-width="1.5" />
 </svg>

@@ -143,6 +143,30 @@ def notifications_live():
 
 
 # ---------------------------------------------------------------------------
+# Airport info — placeholder environmental & runway data
+# TODO: integrate real weather API and runway management system
+# ---------------------------------------------------------------------------
+
+@app.route("/api/airport-info")
+def airport_info():
+    return jsonify({
+        "name": "Aeroportul Internațional Oradea",
+        "code": "OMR",
+        "environmental": {
+            "temperature": 20,
+            "temperature_unit": "C",
+            "wind_speed": 7,
+            "wind_unit": "km/h",
+        },
+        "runway_status": {
+            "live_incidents": 3,
+            "past_24hr": 7,
+            "surface_condition": "Dry",
+        },
+    })
+
+
+# ---------------------------------------------------------------------------
 # API 1 — Live stream (MJPEG, ring buffer, offset 0-30s)
 # GET /api/stream/<camera_id>/live?offset=<seconds>
 #   offset=0 (default) → real-time live
