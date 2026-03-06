@@ -1,119 +1,128 @@
 # Runway Shield
 
-Airport runway monitoring and protection system — HackTech Oradea.
+Airport runway monitoring and hazard detection system — HackTech Oradea.
+
+Uses YOLO object detection with ByteTrack tracking on live camera feeds to detect runway hazards, with a Flask API backend and React frontend dashboard.
 
 ## Prerequisites
 
 - **Python 3.10+** — [python.org/downloads](https://www.python.org/downloads/)
 - **Node.js 18+** — [nodejs.org](https://nodejs.org/)
-- (Optional) [Docker](https://docs.docker.com/get-docker/) if you want to use the Dev Container
+- **FFmpeg** — required for video segment recording
+- (Optional) [Docker](https://docs.docker.com/get-docker/) for the Dev Container
+
+### YOLO Model
+
+Download the YOLO11n segmentation model and place it in the `backend/` directory (or project root):
+
+```bash
+cd backend
+# Download yolo11n-seg.pt from Ultralytics
+# https://docs.ultralytics.com/models/yolo11/
+```
+
+If the model file is not present, the app starts normally with detection disabled.
+Set `YOLO_MODEL_PATH` to override the default path.
 
 ## Getting started
 
 ```bash
-# Clone the repo (skip if you already have it)
 git clone <repo-url>
 cd runwayshield
 ```
 
-### Option A — Run locally (no Docker)
+### Option A — Run locally
 
-#### 1. Install backend dependencies
+#### 1. Backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
+python app.py          # dev server on :8081
+
+# or production:
+./run.sh               # gunicorn on :8081
 ```
 
-> On some systems you may need `pip3` instead of `pip`, or use a virtual environment:
-> ```bash
-> python -m venv venv
-> source venv/bin/activate   # Linux / Mac
-> venv\Scripts\activate      # Windows
-> pip install -r requirements.txt
-> ```
-
-#### 2. Start the backend (Flask)
-
-```bash
-cd backend
-python app.py
-```
-
-The API server starts on **http://localhost:5000**.
-You can verify it works:
-
-```bash
-curl http://localhost:5000/api/status
-```
-
-#### 3. Install frontend dependencies
-
-Open a **second** terminal:
+#### 2. Frontend
 
 ```bash
 cd frontend
 npm install
+npm start              # dev server on :3000, proxies /api to :8081
 ```
 
-#### 4. Start the frontend (React)
+#### 3. Open the app
 
-```bash
-cd frontend
-npm start
-```
-
-The React dev server starts on **http://localhost:3000**.
-API requests are automatically proxied to the Flask backend.
-
-#### 5. Open the app
-
-Go to **http://localhost:3000** in your browser.
+Go to **http://localhost:3000**.
 
 ---
 
 ### Option B — Dev Container (Docker)
 
-If you have Docker installed, you can skip all manual setup:
-
-1. Open the project in VS Code / Cursor
-2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac) → **"Dev Containers: Reopen in Container"**
-3. The container builds automatically (Python 3.12 + Node 20) and installs all dependencies
-4. Start the backend: `cd /workspace/backend && python app.py`
-5. Start the frontend: `cd /workspace/frontend && npm start`
-6. Open **http://localhost:3000**
+1. Open in VS Code / Cursor
+2. **Dev Containers: Reopen in Container**
+3. Backend: `cd /workspace/backend && python app.py`
+4. Frontend: `cd /workspace/frontend && npm start`
+5. Open **http://localhost:3000**
 
 ---
+
+## API Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/status` | System health check |
+| `GET /api/cameras` | List cameras with status and detection info |
+| `GET /api/stream/<id>/live` | Live MJPEG stream. `?annotated=1` for YOLO overlay, `?offset=N` for N-second delay |
+| `GET /api/stream/<id>/history?t=<unix>` | Historical MP4 segment. `?annotated=1` for annotated version |
+| `GET /api/detections/<id>` | Query detection history from SQLite. `?limit=N`, `?from=<iso>`, `?to=<iso>` |
+| `GET /api/notifications/history` | Alert history |
+| `GET /api/notifications/live` | Live alerts |
+| `GET /api/airport-info` | Airport and runway metadata |
 
 ## Running tests
 
 ```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
+cd backend && pytest
+cd frontend && npm test
 ```
 
 ## Project structure
 
 ```
-.devcontainer/     Dev Container config (Docker)
-backend/           Flask API (Python 3.12)
-  app.py           Main server
-  requirements.txt Python dependencies (flask, opencv, numpy, etc.)
-  tests/           Pytest tests
-frontend/          React UI
-  src/             Components & styles
-  public/          Static assets & favicon
-models_testing/    ML model experiments
+backend/
+  app.py              Flask API server
+  camera.py           Camera capture, ring buffer, segment recording
+  detector.py         YOLO segmentation + ByteTrack wrapper
+  detections_db.py    SQLite storage for detections
+  run.sh              Gunicorn startup script
+  requirements.txt    Python dependencies
+  data/               SQLite database (auto-created, gitignored)
+  videos/             Video segments (auto-created, gitignored)
+  tests/              Pytest tests
+frontend/
+  src/App.js          Main React dashboard component
+  src/                Components & styles
+  public/             Static assets
+models_testing/       Standalone ML experiments
+.devcontainer/        Dev Container config
 ```
 
 ## Ports
 
-| Service  | Port | URL                     |
-|----------|------|-------------------------|
-| Frontend | 3000 | http://localhost:3000    |
-| Backend  | 5000 | http://localhost:5000    |
+| Service  | Port | URL                  |
+|----------|------|----------------------|
+| Frontend | 3000 | http://localhost:3000 |
+| Backend  | 8081 | http://localhost:8081 |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8081` | Backend server port |
+| `WORKERS` | `1` | Gunicorn workers (keep at 1) |
+| `THREADS` | `16` | Gunicorn threads |
+| `YOLO_MODEL_PATH` | `yolo11n-seg.pt` | Path to YOLO model file |
+| `CAMERA_1_URL` | `0` | Camera 1 source (device index or URL) |
+| `CAMERA_2_URL` | `http://10.1.0.74:8080/video` | Camera 2 source |

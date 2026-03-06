@@ -24,3 +24,7 @@ Thumbs.db
 # Env
 .env
 /backend/videos/
+/backend/data/
+
+# ML model weights
+*.pt
