@@ -21,15 +21,11 @@ CAMERA_CONFIG = {
         "location": {"lat": 47.0365, "lng": 21.9484},
     },
     "camera_2": {
-        "url": "http://10.1.0.78:8080/video",
+        "url": os.environ.get("CAMERA_2_URL", "http://10.1.0.78:8080/video"),
         "name": "Runway Side",
         "location": {"lat": 49.0365, "lng": 21.9484},
     },
-    "camera_2": {
-        "url": os.environ.get("CAMERA_2_URL", "0"),
-        "name": "Runway Main 2",
-        "location": {"lat": 47.0365, "lng": 21.9484},
-    },
+
 }
 
 cameras: dict[str, CameraStream] = {}
@@ -242,5 +238,5 @@ def history_stream(camera_id):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8081))
     app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
