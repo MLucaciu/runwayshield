@@ -171,22 +171,27 @@
     }
 
     // ---- Camera list ----
+    let camerasData = [];  // array from /api/cameras
+
+    function getCam(id) {
+      return camerasData.find(c => c.id === id);
+    }
+
     async function loadCameras() {
       try {
         const resp = await fetch("/api/cameras");
-        const data = await resp.json();
+        camerasData = await resp.json();
         cameraSelect.innerHTML = "";
-        const ids = Object.keys(data);
-        if (ids.length === 0) {
+        if (camerasData.length === 0) {
           cameraSelect.innerHTML = '<option>No cameras</option>';
           return;
         }
-        ids.forEach(id => {
+        camerasData.forEach(cam => {
           const opt = document.createElement("option");
-          opt.value = id; opt.textContent = id;
+          opt.value = cam.id; opt.textContent = cam.name || cam.id;
           cameraSelect.appendChild(opt);
         });
-        currentCamera = ids[0];
+        currentCamera = camerasData[0].id;
         seekTo(0);
         loadSegments();
       } catch (e) {
@@ -304,8 +309,8 @@
       if (!currentCamera) return;
       try {
         const resp = await fetch("/api/cameras");
-        const data = await resp.json();
-        const cam = data[currentCamera];
+        camerasData = await resp.json();
+        const cam = getCam(currentCamera);
         if (!cam || !cam.segments || cam.segments.length === 0) {
           segments = [];
           segmentList.innerHTML = '<li class="empty">No segments yet</li>';
@@ -371,11 +376,10 @@
       if (!currentCamera) return;
       try {
         const resp = await fetch("/api/cameras");
-        const data = await resp.json();
-        const cam = data[currentCamera];
+        camerasData = await resp.json();
+        const cam = getCam(currentCamera);
         if (cam && cam.connected) {
           statusDot.className = "status-dot live";
-          if (mode === "live") statusText.textContent = statusText.textContent; // keep current
         } else {
           statusDot.className = "status-dot off";
           statusText.textContent = "Camera disconnected";
