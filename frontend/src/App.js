@@ -107,7 +107,12 @@ export default function App() {
       setAlerts(alertData);
       setLiveAlerts(liveData);
       setBackendOk(statusData.status === "ok");
-      if (!activeCam && camData.length) setActiveCam(camData[0]);
+      if (!activeCam && camData.length) {
+        setActiveCam(camData[0]);
+      } else if (activeCam) {
+        const refreshed = camData.find((c) => c.id === activeCam.id);
+        if (refreshed) setActiveCam(refreshed);
+      }
     } catch {
       setBackendOk(false);
     }

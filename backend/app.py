@@ -1,3 +1,4 @@
+import atexit
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,14 @@ CAMERA_CONFIG = {
 
 cameras: dict[str, CameraStream] = {}
 _cameras_started = False
+
+
+def _shutdown_cameras():
+    for cam_id, cam in cameras.items():
+        print(f"[camera] {cam_id} shutting down…")
+        cam.stop()
+
+atexit.register(_shutdown_cameras)
 
 
 def start_cameras():

@@ -1,5 +1,6 @@
 import cv2
 import threading
+import subprocess
 import time
 import os
 from collections import deque
@@ -227,7 +228,11 @@ class CameraStream:
         if self._writer is None or self._should_rotate(timestamp):
             self._finalize_segment()
             self._start_segment(frame, timestamp)
-        self._writer.write(frame)
+        try:
+            self._writer.stdin.write(frame.tobytes())
+        except BrokenPipeError:
+            print(f"[camera] {self.camera_id} ffmpeg pipe broken, will restart segment")
+            self._writer = None
 
     def _should_rotate(self, timestamp):
         if self._segment_boundary is None:
@@ -235,7 +240,6 @@ class CameraStream:
         return timestamp >= self._segment_boundary
 
     def _start_segment(self, frame, timestamp):
-        # Name segment by its wall-clock slot (aligned to :00 or :30)
         slot_start = _segment_boundary_for(timestamp, self.segment_seconds)
         self._segment_boundary = _next_segment_boundary(timestamp, self.segment_seconds)
 
@@ -244,12 +248,28 @@ class CameraStream:
 
         h, w = frame.shape[:2]
         self._frame_size = (w, h)
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        self._writer = cv2.VideoWriter(self._segment_path, fourcc, self.fps, (w, h))
+
+        self._writer = subprocess.Popen(
+            ["ffmpeg", "-y",
+             "-f", "rawvideo", "-pix_fmt", "bgr24",
+             "-s", f"{w}x{h}", "-r", str(self.fps),
+             "-i", "pipe:0",
+             "-c:v", "libx264", "-preset", "ultrafast",
+             "-movflags", "+faststart",
+             self._segment_path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print(f"[camera] {self.camera_id} started segment {filename}")
 
     def _finalize_segment(self):
         if self._writer is not None:
-            self._writer.release()
+            try:
+                self._writer.stdin.close()
+                self._writer.wait(timeout=10)
+            except Exception as e:
+                print(f"[camera] {self.camera_id} segment finalize error: {e}")
+                self._writer.kill()
             self._writer = None
             self._segment_boundary = None
             self._segment_path = None
