@@ -13,10 +13,8 @@ CORS(app)
 # ---------------------------------------------------------------------------
 # Camera registry
 # ---------------------------------------------------------------------------
-# Configure cameras here.  Each key is the camera_id used in API URLs.
-# Set CAMERA_<ID>_URL env vars, or edit this dict directly.
 CAMERA_CONFIG = {
-    "camera_1": os.environ.get("CAMERA_1_URL", "0"),  # "0" = local webcam
+    "camera_1": os.environ.get("CAMERA_1_URL", "0"),
 }
 
 cameras: dict[str, CameraStream] = {}
@@ -24,7 +22,8 @@ cameras: dict[str, CameraStream] = {}
 
 def start_cameras():
     for cam_id, url in CAMERA_CONFIG.items():
-        cam = CameraStream(camera_id=cam_id, url=url, video_dir="videos")
+        cam = CameraStream(camera_id=cam_id, url=url, video_dir="videos",
+                           buffer_seconds=45)
         try:
             cam.start()
             cameras[cam_id] = cam
@@ -40,6 +39,15 @@ def start_cameras():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/test-delay")
+def test_delay():
+    return """<!DOCTYPE html>
+<html><head><title>5s delay test</title></head>
+<body style="margin:0;background:#000;display:flex;justify-content:center;align-items:center;height:100vh;">
+<img src="/api/stream/camera_1/live?offset=5" style="max-width:100%;max-height:100%;">
+</body></html>"""
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +74,7 @@ def list_cameras():
     return jsonify({
         cam_id: {
             "url": cam.url,
-            "buffer_start": cam.buffer_start_time().isoformat() if cam.buffer_start_time() else None,
+            "connected": cam.connected,
             "segments": cam.list_segments(),
         }
         for cam_id, cam in cameras.items()
@@ -74,7 +82,10 @@ def list_cameras():
 
 
 # ---------------------------------------------------------------------------
-# Live MJPEG stream
+# API 1 — Live stream (MJPEG, ring buffer, offset 0-30s)
+# GET /api/stream/<camera_id>/live?offset=<seconds>
+#   offset=0 (default) → real-time live
+#   offset=5           → always 5s behind live, persistently
 # ---------------------------------------------------------------------------
 
 @app.route("/api/stream/<camera_id>/live")
@@ -83,66 +94,62 @@ def live_stream(camera_id):
     if not cam:
         return jsonify({"error": "Camera not found"}), 404
 
+    offset = min(request.args.get("offset", 0, type=float), 30)
+
     def generate():
-        while True:
-            jpeg = cam.wait_for_frame(timeout=1.0)
-            if jpeg:
-                yield (b"--frame\r\n"
-                       b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
+        if offset <= 0:
+            # Real-time: serve frames as they arrive
+            while True:
+                jpeg = cam.wait_for_frame(timeout=1.0)
+                if jpeg:
+                    yield (b"--frame\r\n"
+                           b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
+        else:
+            # Delayed: continuously serve the frame from `offset` seconds ago
+            last_jpeg = None
+            while True:
+                target = datetime.now(timezone.utc) - timedelta(seconds=offset)
+                jpeg = cam.get_frame_at(target)
+                if jpeg and jpeg is not last_jpeg:
+                    last_jpeg = jpeg
+                    yield (b"--frame\r\n"
+                           b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
+                time.sleep(1 / cam.fps)
 
     return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
 # ---------------------------------------------------------------------------
-# Unified playback (ring buffer or disk segments)
+# API 2 — Historical playback (MP4 segment by unix timestamp)
+# GET /api/stream/<camera_id>/history?t=<unix_timestamp>
+#   Returns the MP4 segment that covers the given timestamp.
 # ---------------------------------------------------------------------------
 
-@app.route("/api/stream/<camera_id>/playback")
-def playback(camera_id):
+@app.route("/api/stream/<camera_id>/history")
+def history_stream(camera_id):
     cam = cameras.get(camera_id)
     if not cam:
         return jsonify({"error": "Camera not found"}), 404
 
-    from_str = request.args.get("from")
-    to_str = request.args.get("to")
-    if not from_str or not to_str:
-        return jsonify({"error": "Missing 'from' and 'to' query params (ISO 8601 UTC)"}), 400
+    t = request.args.get("t", type=float)
+    if t is None:
+        return jsonify({"error": "Missing 't' query param (unix timestamp)"}), 400
 
-    try:
-        from_ts = datetime.fromisoformat(from_str).replace(tzinfo=timezone.utc)
-        to_ts = datetime.fromisoformat(to_str).replace(tzinfo=timezone.utc)
-    except ValueError:
-        return jsonify({"error": "Invalid timestamp format. Use ISO 8601."}), 400
+    target = datetime.fromtimestamp(t, tz=timezone.utc)
 
-    # Try ring buffer first
-    buffer_start = cam.buffer_start_time()
-    if buffer_start and from_ts >= buffer_start:
-        frames = cam.get_buffer_frames(from_ts, to_ts)
-        if frames:
-            def generate():
-                for _ts, jpeg in frames:
-                    yield (b"--frame\r\n"
-                           b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
-                    time.sleep(1 / cam.fps)
-            return Response(generate(),
-                            mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    # Fall back to disk segment
-    target_prefix = from_ts.strftime("%Y%m%dT")
     for seg_name in cam.list_segments():
-        # Segment name: 20260306T140200Z.mp4 — find the one covering from_ts
         seg_ts_str = seg_name.replace(".mp4", "").rstrip("Z")
         try:
             seg_ts = datetime.strptime(seg_ts_str, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
         except ValueError:
             continue
         seg_end = seg_ts + timedelta(seconds=cam.segment_seconds)
-        if seg_ts <= from_ts and from_ts <= seg_end:
+        if seg_ts <= target < seg_end:
             path = cam.segment_path(seg_name)
             if os.path.isfile(path):
                 return send_file(path, mimetype="video/mp4")
 
-    return jsonify({"error": "No footage available for the requested time range"}), 404
+    return jsonify({"error": "No segment found for the given timestamp"}), 404
 
 
 # ---------------------------------------------------------------------------
