@@ -61,8 +61,8 @@ class CameraStream:
 
         # Latest frame for live MJPEG stream
         self._latest_jpeg = None
-        self._frame_lock = threading.Lock()
-        self._frame_event = threading.Event()
+        self._frame_cond = threading.Condition()
+        self._frame_seq = 0
 
         # Video writer state
         self._writer = None
@@ -85,6 +85,9 @@ class CameraStream:
         for attempt in range(retries):
             self._cap = cv2.VideoCapture(source)
             if self._cap.isOpened():
+                # Minimize internal buffer so read() returns the latest frame,
+                # not stale queued frames (critical for network cameras).
+                self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 break
             self._cap.release()
             if attempt < retries - 1:
@@ -131,6 +134,7 @@ class CameraStream:
                     source = int(self.url) if self.url.isdigit() else self.url
                     self._cap.release()
                     self._cap = cv2.VideoCapture(source)
+                    self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 else:
                     time.sleep(0.01)
                 continue
@@ -146,10 +150,11 @@ class CameraStream:
             _, jpeg = cv2.imencode(".jpg", frame)
             jpeg_bytes = jpeg.tobytes()
 
-            # Update latest frame
-            with self._frame_lock:
+            # Update latest frame and notify all waiting consumers
+            with self._frame_cond:
                 self._latest_jpeg = jpeg_bytes
-            self._frame_event.set()
+                self._frame_seq += 1
+                self._frame_cond.notify_all()
 
             # Push to ring buffer
             with self._buffer_lock:
@@ -163,14 +168,16 @@ class CameraStream:
     # ------------------------------------------------------------------
 
     def get_latest_jpeg(self):
-        with self._frame_lock:
+        with self._frame_cond:
             return self._latest_jpeg
 
     def wait_for_frame(self, timeout=1.0):
-        """Block until a new frame arrives (or timeout). Returns jpeg bytes or None."""
-        self._frame_event.wait(timeout=timeout)
-        self._frame_event.clear()
-        return self.get_latest_jpeg()
+        """Block until a new frame arrives (or timeout). Returns jpeg bytes or None.
+        Each caller independently waits — multiple consumers get every frame."""
+        with self._frame_cond:
+            seq = self._frame_seq
+            self._frame_cond.wait_for(lambda: self._frame_seq != seq, timeout=timeout)
+            return self._latest_jpeg
 
     # ------------------------------------------------------------------
     # Ring buffer access
