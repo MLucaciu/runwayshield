@@ -33,7 +33,7 @@
       position: relative; background: #000; border-radius: 8px; overflow: hidden;
       aspect-ratio: 16/9; margin-bottom: 16px;
     }
-    .video-wrapper img {
+    .video-wrapper img, .video-wrapper video {
       width: 100%; height: 100%; object-fit: contain; display: block;
     }
     .video-wrapper .overlay {
@@ -50,20 +50,20 @@
     }
     .controls button {
       background: #334155; color: #e2e8f0; border: 1px solid #475569;
-      padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px;
-      transition: background 0.15s;
+      padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+      transition: background 0.15s; white-space: nowrap;
     }
     .controls button:hover { background: #475569; }
     .controls button.active { background: #3b82f6; border-color: #3b82f6; }
-
-    .seek-group {
-      display: flex; align-items: center; gap: 6px;
-      background: #1e293b; border: 1px solid #475569; border-radius: 6px;
-      padding: 4px 8px;
+    .controls button.live-btn { background: #dc2626; border-color: #dc2626; font-weight: 600; }
+    .controls button.live-btn.dimmed { background: #334155; border-color: #475569; font-weight: 400; }
+    .controls .spacer { flex: 1; }
+    .controls .offset-input {
+      background: #1e293b; color: #e2e8f0; border: 1px solid #475569;
+      padding: 8px 10px; border-radius: 6px; font-size: 13px; width: 70px;
+      text-align: center;
     }
-    .seek-group label { font-size: 12px; color: #94a3b8; white-space: nowrap; }
-    .seek-group input[type=range] { width: 140px; accent-color: #3b82f6; }
-    .seek-group .seek-val { font-size: 12px; min-width: 30px; text-align: right; }
+    .controls label { font-size: 12px; color: #94a3b8; }
 
     .segments {
       background: #1e293b; border: 1px solid #334155; border-radius: 8px;
@@ -77,6 +77,10 @@
     }
     .segments li:hover { background: #334155; }
     .segments li.active { background: #1e40af; }
+    .segments li .progress {
+      height: 2px; background: #3b82f6; margin-top: 4px; border-radius: 1px;
+      width: 0%; transition: width 0.3s linear;
+    }
     .segments .empty { color: #64748b; font-size: 13px; }
   </style>
 </head>
@@ -98,20 +102,21 @@
     </div>
 
     <div class="video-wrapper">
-      <img id="videoFeed" alt="No feed" src="">
+      <img id="videoFeedImg" alt="No feed" src="">
+      <video id="videoFeedVideo" autoplay style="display:none;"></video>
       <div class="overlay live-badge" id="modeBadge">LIVE</div>
     </div>
 
     <div class="controls">
-      <button id="btnLive" class="active">Live</button>
+      <button id="btnLive" class="live-btn">LIVE</button>
       <button id="btnBack5">-5s</button>
       <button id="btnBack10">-10s</button>
       <button id="btnBack30">-30s</button>
-      <div class="seek-group">
-        <label>Rewind</label>
-        <input type="range" id="seekSlider" min="0" max="30" value="0" step="1">
-        <span class="seek-val" id="seekVal">0s</span>
-      </div>
+      <button id="btnBack120">-120s</button>
+      <div class="spacer"></div>
+      <label>Custom:</label>
+      <input type="number" id="customOffset" class="offset-input" min="0" max="9999" value="0" placeholder="sec">
+      <button id="btnCustom">Go</button>
     </div>
 
     <div class="segments">
@@ -121,18 +126,49 @@
   </div>
 
   <script>
-    const videoFeed = document.getElementById("videoFeed");
+    const imgFeed = document.getElementById("videoFeedImg");
+    const vidFeed = document.getElementById("videoFeedVideo");
     const cameraSelect = document.getElementById("cameraSelect");
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
     const modeBadge = document.getElementById("modeBadge");
     const segmentList = document.getElementById("segmentList");
-    const seekSlider = document.getElementById("seekSlider");
-    const seekVal = document.getElementById("seekVal");
     const btnLive = document.getElementById("btnLive");
 
     let currentCamera = null;
-    let mode = "live"; // "live" | "playback"
+    let mode = "live";             // "live" | "history"
+    let segments = [];
+    let activeSegmentIndex = -1;
+    let progressTimer = null;
+
+    // ---- Show img (MJPEG) or video (MP4) ----
+    function showImg() {
+      imgFeed.style.display = "block";
+      vidFeed.style.display = "none";
+      vidFeed.pause();
+      vidFeed.removeAttribute("src");
+      clearInterval(progressTimer);
+    }
+    function showVid() {
+      imgFeed.style.display = "none";
+      imgFeed.src = "";
+      vidFeed.style.display = "block";
+    }
+
+    // ---- Helpers ----
+    function segToDate(segName) {
+      const ts = segName.replace(".mp4", "").replace("Z", "");
+      const y = ts.slice(0,4), mo = ts.slice(4,6), d = ts.slice(6,8);
+      const h = ts.slice(9,11), mi = ts.slice(11,13), s = ts.slice(13,15);
+      return new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}Z`);
+    }
+    function formatTime(date) {
+      return date.toISOString().slice(11, 19);
+    }
+    function setActive(btn) {
+      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+      if (btn) btn.classList.add("active");
+    }
 
     // ---- Camera list ----
     async function loadCameras() {
@@ -147,62 +183,120 @@
         }
         ids.forEach(id => {
           const opt = document.createElement("option");
-          opt.value = id;
-          opt.textContent = id;
+          opt.value = id; opt.textContent = id;
           cameraSelect.appendChild(opt);
         });
         currentCamera = ids[0];
-        goLive();
+        seekTo(0);
         loadSegments();
       } catch (e) {
         statusText.textContent = "Backend offline";
       }
     }
 
-    // ---- Live mode ----
-    function goLive() {
+    // ---- Core: seek to N seconds behind live ----
+    function seekTo(seconds) {
       if (!currentCamera) return;
-      mode = "live";
-      videoFeed.src = `/api/stream/${currentCamera}/live`;
+      seconds = Math.max(0, Math.round(seconds));
+
+      if (seconds <= 30) {
+        // API 1: live endpoint with offset (ring buffer, catches up to live)
+        mode = "live";
+        activeSegmentIndex = -1;
+        showImg();
+        const url = seconds > 0
+          ? `/api/stream/${currentCamera}/live?offset=${seconds}`
+          : `/api/stream/${currentCamera}/live`;
+        imgFeed.src = url;
+
+        if (seconds === 0) {
+          statusText.textContent = "Live";
+          modeBadge.textContent = "LIVE";
+          modeBadge.className = "overlay live-badge";
+          btnLive.className = "live-btn";
+        } else {
+          statusText.textContent = `-${seconds}s`;
+          modeBadge.textContent = `-${seconds}s`;
+          modeBadge.className = "overlay playback-badge";
+          btnLive.className = "live-btn dimmed";
+        }
+      } else {
+        // API 2: history endpoint with unix timestamp
+        mode = "history";
+        activeSegmentIndex = -1;
+        const t = (Date.now() / 1000) - seconds;
+        showVid();
+        vidFeed.src = `/api/stream/${currentCamera}/history?t=${t}`;
+        vidFeed.load();
+        vidFeed.play();
+
+        const targetDate = new Date(t * 1000);
+        statusText.textContent = formatTime(targetDate);
+        modeBadge.textContent = `-${seconds}s`;
+        modeBadge.className = "overlay playback-badge";
+        btnLive.className = "live-btn dimmed";
+
+        // Find which segment this is for highlighting
+        highlightSegmentForTime(t);
+        startAutoAdvance(t);
+      }
       statusDot.className = "status-dot live";
-      statusText.textContent = "Live";
-      modeBadge.textContent = "LIVE";
-      modeBadge.className = "overlay live-badge";
-      seekSlider.value = 0;
-      seekVal.textContent = "0s";
-      setActiveButton(btnLive);
+      highlightSegment(activeSegmentIndex);
     }
 
-    // ---- Playback mode ----
-    function seekBack(seconds) {
-      if (!currentCamera) return;
-      mode = "playback";
-      const now = new Date();
-      const from = new Date(now.getTime() - seconds * 1000);
-      const to = new Date(now.getTime());
-      const params = `from=${from.toISOString()}&to=${to.toISOString()}`;
-      videoFeed.src = `/api/stream/${currentCamera}/playback?${params}`;
-      statusDot.className = "status-dot live";
-      statusText.textContent = `Playback -${seconds}s`;
-      modeBadge.textContent = `-${seconds}s`;
-      modeBadge.className = "overlay playback-badge";
+    // ---- History: auto-advance segments ----
+    function startAutoAdvance(startUnix) {
+      clearInterval(progressTimer);
+      progressTimer = setInterval(() => {
+        if (!vidFeed.duration || !isFinite(vidFeed.duration)) return;
+        const bar = document.querySelector("#segmentList li.active .progress");
+        if (bar) bar.style.width = `${(vidFeed.currentTime / vidFeed.duration) * 100}%`;
+      }, 250);
     }
 
-    function playSegment(segName) {
-      if (!currentCamera) return;
-      mode = "playback";
-      // Parse timestamp from segment name: 20260306T140200Z.mp4
-      const tsStr = segName.replace(".mp4", "").replace("Z", "");
-      const y = tsStr.slice(0,4), mo = tsStr.slice(4,6), d = tsStr.slice(6,8);
-      const h = tsStr.slice(9,11), mi = tsStr.slice(11,13), s = tsStr.slice(13,15);
-      const from = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}Z`);
-      const to = new Date(from.getTime() + 30000);
-      const params = `from=${from.toISOString()}&to=${to.toISOString()}`;
-      videoFeed.src = `/api/stream/${currentCamera}/playback?${params}`;
-      statusDot.className = "status-dot live";
-      statusText.textContent = `Segment ${segName}`;
-      modeBadge.textContent = "REC";
+    vidFeed.addEventListener("ended", () => {
+      if (mode !== "history") return;
+      // Load next segment
+      if (activeSegmentIndex >= 0 && activeSegmentIndex + 1 < segments.length) {
+        playSegmentByIndex(activeSegmentIndex + 1);
+      } else {
+        seekTo(0); // caught up, go live
+      }
+    });
+
+    function playSegmentByIndex(index) {
+      if (!currentCamera || index < 0 || index >= segments.length) {
+        seekTo(0); return;
+      }
+      mode = "history";
+      activeSegmentIndex = index;
+      const segName = segments[index];
+      const segDate = segToDate(segName);
+      const t = segDate.getTime() / 1000;
+
+      showVid();
+      vidFeed.src = `/api/stream/${currentCamera}/history?t=${t}`;
+      vidFeed.load();
+      vidFeed.play();
+
+      statusText.textContent = formatTime(segDate);
+      modeBadge.textContent = formatTime(segDate);
       modeBadge.className = "overlay playback-badge";
+      btnLive.className = "live-btn dimmed";
+      highlightSegment(index);
+      startAutoAdvance(t);
+    }
+
+    function highlightSegmentForTime(unixT) {
+      const target = new Date(unixT * 1000);
+      for (let i = 0; i < segments.length; i++) {
+        const segDate = segToDate(segments[i]);
+        const segEnd = new Date(segDate.getTime() + 30000);
+        if (segDate <= target && target < segEnd) {
+          activeSegmentIndex = i;
+          return;
+        }
+      }
     }
 
     // ---- Segments list ----
@@ -213,63 +307,87 @@
         const data = await resp.json();
         const cam = data[currentCamera];
         if (!cam || !cam.segments || cam.segments.length === 0) {
+          segments = [];
           segmentList.innerHTML = '<li class="empty">No segments yet</li>';
           return;
         }
-        segmentList.innerHTML = "";
-        cam.segments.reverse().forEach(seg => {
-          const li = document.createElement("li");
-          li.textContent = seg;
-          li.addEventListener("click", () => {
-            document.querySelectorAll("#segmentList li").forEach(l => l.classList.remove("active"));
-            li.classList.add("active");
-            playSegment(seg);
-          });
-          segmentList.appendChild(li);
-        });
+        segments = cam.segments.slice().sort();
+        renderSegmentList();
       } catch (e) { /* ignore */ }
     }
 
-    // ---- UI helpers ----
-    function setActiveButton(btn) {
-      document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
+    function renderSegmentList() {
+      segmentList.innerHTML = "";
+      segments.slice().reverse().forEach((seg, revIdx) => {
+        const realIdx = segments.length - 1 - revIdx;
+        const li = document.createElement("li");
+        const segDate = segToDate(seg);
+        li.textContent = `${formatTime(segDate)}  ${seg}`;
+        li.dataset.index = realIdx;
+        if (realIdx === activeSegmentIndex) li.classList.add("active");
+        const bar = document.createElement("div");
+        bar.className = "progress";
+        li.appendChild(bar);
+        li.addEventListener("click", () => playSegmentByIndex(realIdx));
+        segmentList.appendChild(li);
+      });
     }
 
-    // ---- Event listeners ----
+    function highlightSegment(index) {
+      document.querySelectorAll("#segmentList li").forEach(li => {
+        li.classList.toggle("active", parseInt(li.dataset.index) === index);
+        const bar = li.querySelector(".progress");
+        if (bar && parseInt(li.dataset.index) !== index) bar.style.width = "0%";
+      });
+    }
+
+    // ---- Button events ----
     cameraSelect.addEventListener("change", () => {
       currentCamera = cameraSelect.value;
-      goLive();
+      seekTo(0);
       loadSegments();
     });
 
-    btnLive.addEventListener("click", () => goLive());
+    btnLive.addEventListener("click", () => { seekTo(0); setActive(btnLive); });
 
-    document.getElementById("btnBack5").addEventListener("click", function() {
-      seekBack(5); seekSlider.value = 5; seekVal.textContent = "5s"; setActiveButton(this);
-    });
-    document.getElementById("btnBack10").addEventListener("click", function() {
-      seekBack(10); seekSlider.value = 10; seekVal.textContent = "10s"; setActiveButton(this);
-    });
-    document.getElementById("btnBack30").addEventListener("click", function() {
-      seekBack(30); seekSlider.value = 30; seekVal.textContent = "30s"; setActiveButton(this);
-    });
+    document.getElementById("btnBack5").addEventListener("click", function() { seekTo(5); setActive(this); });
+    document.getElementById("btnBack10").addEventListener("click", function() { seekTo(10); setActive(this); });
+    document.getElementById("btnBack30").addEventListener("click", function() { seekTo(30); setActive(this); });
+    document.getElementById("btnBack120").addEventListener("click", function() { seekTo(120); setActive(this); });
 
-    seekSlider.addEventListener("input", () => {
-      const val = parseInt(seekSlider.value);
-      seekVal.textContent = `${val}s`;
-      if (val === 0) {
-        goLive();
-      } else {
-        seekBack(val);
-        document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+    document.getElementById("btnCustom").addEventListener("click", function() {
+      const val = parseInt(document.getElementById("customOffset").value) || 0;
+      seekTo(val); setActive(this);
+    });
+    document.getElementById("customOffset").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const val = parseInt(e.target.value) || 0;
+        seekTo(val); setActive(document.getElementById("btnCustom"));
       }
     });
 
-    // Refresh segment list periodically
-    setInterval(loadSegments, 10000);
+    // ---- Status polling ----
+    async function pollStatus() {
+      if (!currentCamera) return;
+      try {
+        const resp = await fetch("/api/cameras");
+        const data = await resp.json();
+        const cam = data[currentCamera];
+        if (cam && cam.connected) {
+          statusDot.className = "status-dot live";
+          if (mode === "live") statusText.textContent = statusText.textContent; // keep current
+        } else {
+          statusDot.className = "status-dot off";
+          statusText.textContent = "Camera disconnected";
+        }
+      } catch (e) {
+        statusDot.className = "status-dot off";
+        statusText.textContent = "Backend offline";
+      }
+    }
 
-    // Init
+    setInterval(loadSegments, 10000);
+    setInterval(pollStatus, 3000);
     loadCameras();
   </script>
 </body>
