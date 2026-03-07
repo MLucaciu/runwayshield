@@ -257,14 +257,14 @@ def resolve_notification(notif_id):
 def alerts_live():
     if not _alerts_db:
         return jsonify([])
-    return jsonify(_alerts_db.query_live())
+    return jsonify(_enrich_alerts(_alerts_db.query_live()))
 
 
 @app.route("/api/alerts/history")
 def alerts_history():
     if not _alerts_db:
         return jsonify([])
-    return jsonify(_alerts_db.query_history(
+    rows = _alerts_db.query_history(
         limit=request.args.get("limit", 100, type=int),
         camera_id=request.args.get("camera_id"),
         zone_id=request.args.get("zone_id"),
@@ -272,14 +272,23 @@ def alerts_history():
         severity=request.args.get("severity"),
         from_ts=request.args.get("from"),
         to_ts=request.args.get("to"),
-    ))
+    )
+    return jsonify(_enrich_alerts(rows))
+
+
+def _enrich_alerts(alerts):
+    """Add camera_name to each alert dict from CAMERA_CONFIG."""
+    for a in alerts:
+        cfg = CAMERA_CONFIG.get(a.get("camera_id"), {})
+        a["camera_name"] = cfg.get("name", a.get("camera_id", ""))
+    return alerts
 
 
 @app.route("/api/alerts/reports")
 def alerts_reports():
     if not _alerts_db:
         return jsonify([])
-    return jsonify(_alerts_db.query_reports(
+    rows = _alerts_db.query_reports(
         limit=request.args.get("limit", 500, type=int),
         camera_id=request.args.get("camera_id"),
         zone_id=request.args.get("zone_id"),
@@ -287,7 +296,8 @@ def alerts_reports():
         severity=request.args.get("severity"),
         from_ts=request.args.get("from"),
         to_ts=request.args.get("to"),
-    ))
+    )
+    return jsonify(_enrich_alerts(rows))
 
 
 @app.route("/api/alerts/<int:alert_id>")
@@ -298,6 +308,7 @@ def get_alert(alert_id):
     if not alert:
         return jsonify({"error": "Alert not found"}), 404
     alert["logs"] = _alerts_db.get_logs(alert_id)
+    _enrich_alerts([alert])
     return jsonify(alert)
 
 

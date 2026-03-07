@@ -23,14 +23,10 @@ class AlertsDB:
         return self._local.conn
 
     def clear_all(self):
-        """Close stale active alerts from a previous run. Acknowledged/closed alerts are preserved as reports."""
+        """Delete all alerts and logs for a fresh start."""
         conn = self._conn()
-        now = self._now_iso()
-        conn.execute(
-            "UPDATE alerts SET status = 'closed', closed_at = ?, updated_at = ? "
-            "WHERE status = 'active'",
-            (now, now),
-        )
+        conn.execute("DELETE FROM alert_logs")
+        conn.execute("DELETE FROM alerts")
         conn.commit()
 
     def _init_schema(self):
@@ -40,6 +36,7 @@ class AlertsDB:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 camera_id TEXT NOT NULL,
                 zone_id TEXT NOT NULL,
+                zone_name TEXT,
                 object_type TEXT NOT NULL,
                 severity TEXT NOT NULL DEFAULT 'medium',
                 status TEXT NOT NULL DEFAULT 'active',
@@ -89,7 +86,8 @@ class AlertsDB:
     # Core upsert: one active alert per (camera_id, zone_id, object_type)
     # ------------------------------------------------------------------
 
-    def upsert(self, camera_id, zone_id, object_type, severity, gps_lat, gps_lng):
+    def upsert(self, camera_id, zone_id, object_type, severity, gps_lat, gps_lng,
+               zone_name=None):
         """Create or update an alert. Returns (alert_dict, is_new)."""
         conn = self._conn()
         now = self._now_iso()
@@ -113,10 +111,11 @@ class AlertsDB:
 
         cur = conn.execute(
             "INSERT INTO alerts "
-            "(camera_id, zone_id, object_type, severity, status, "
+            "(camera_id, zone_id, zone_name, object_type, severity, status, "
             "gps_lat, gps_lng, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)",
-            (camera_id, zone_id, object_type, severity, gps_lat, gps_lng, now, now),
+            "VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
+            (camera_id, zone_id, zone_name, object_type, severity,
+             gps_lat, gps_lng, now, now),
         )
         alert_id = cur.lastrowid
         self._log(conn, alert_id, "created", {

@@ -614,6 +614,9 @@ td {
         <select class="filter-select" id="filterCamera">
           <option value="">All cameras</option>
         </select>
+        <select class="filter-select" id="filterObject">
+          <option value="">All objects</option>
+        </select>
       </div>
 
       <div class="table-wrap">
@@ -670,6 +673,7 @@ td {
   const filterSeverity = document.getElementById("filterSeverity");
   const filterStatus = document.getElementById("filterStatus");
   const filterCamera = document.getElementById("filterCamera");
+  const filterObject = document.getElementById("filterObject");
 
   const SEV_ORDER = { severe: 0, medium: 1, low: 2 };
 
@@ -722,35 +726,52 @@ td {
     try {
       var res = await fetch("/api/alerts/reports?limit=500");
       reports = await res.json();
-      populateCameraFilter();
+      populateFilters();
       render();
     } catch(e) {
       console.error("Failed to load reports", e);
     }
   }
 
-  function populateCameraFilter() {
-    var cams = new Set();
-    reports.forEach(function(r) { if (r.camera_id) cams.add(r.camera_id); });
-    var current = filterCamera.value;
+  function populateFilters() {
+    var camMap = {};
+    var objects = new Set();
+    reports.forEach(function(r) {
+      if (r.camera_id) camMap[r.camera_id] = r.camera_name || r.camera_id;
+      if (r.object_type) objects.add(r.object_type);
+    });
+
+    var curCam = filterCamera.value;
     filterCamera.innerHTML = '<option value="">All cameras</option>';
-    cams.forEach(function(c) {
+    Object.keys(camMap).forEach(function(id) {
       var opt = document.createElement("option");
-      opt.value = c;
-      opt.textContent = c;
+      opt.value = id;
+      opt.textContent = camMap[id];
       filterCamera.appendChild(opt);
     });
-    filterCamera.value = current;
+    filterCamera.value = curCam;
+
+    var curObj = filterObject.value;
+    filterObject.innerHTML = '<option value="">All objects</option>';
+    Array.from(objects).sort().forEach(function(o) {
+      var opt = document.createElement("option");
+      opt.value = o;
+      opt.textContent = o.charAt(0).toUpperCase() + o.slice(1);
+      filterObject.appendChild(opt);
+    });
+    filterObject.value = curObj;
   }
 
   function getFiltered() {
     var sev = filterSeverity.value;
     var st = filterStatus.value;
     var cam = filterCamera.value;
+    var obj = filterObject.value;
     return reports.filter(function(r) {
       if (sev && r.severity !== sev) return false;
       if (st && r.status !== st) return false;
       if (cam && r.camera_id !== cam) return false;
+      if (obj && r.object_type !== obj) return false;
       return true;
     });
   }
@@ -809,8 +830,8 @@ td {
         '<td class="td-mono">' + esc(String(r.id)) + '</td>' +
         '<td><span class="sev-badge sev-' + esc(r.severity) + '">' + esc((r.severity || "").toUpperCase()) + '</span></td>' +
         '<td class="td-cap">' + esc(r.object_type) + '</td>' +
-        '<td>' + esc(r.zone_id) + '</td>' +
-        '<td class="td-mono">' + esc(r.camera_id) + '</td>' +
+        '<td>' + esc(r.zone_name || r.zone_id) + '</td>' +
+        '<td>' + esc(r.camera_name || r.camera_id) + '</td>' +
         '<td><span class="status-badge st-' + esc(r.status) + '">' + esc((r.status || "").toUpperCase()) + '</span></td>' +
         '<td class="td-mono">' + esc(fmtDateTime(r.created_at)) + '</td>' +
         '<td>' + esc(r.acknowledged_by || "—") + '</td>' +
@@ -836,6 +857,7 @@ td {
   filterSeverity.addEventListener("change", render);
   filterStatus.addEventListener("change", render);
   filterCamera.addEventListener("change", render);
+  filterObject.addEventListener("change", render);
 
   // ── Modal ──────────────────────────────────────────────────────
   function closeModal() {
@@ -852,7 +874,9 @@ td {
   });
 
   async function openModal(alert) {
-    modalTitle.textContent = (alert.object_type || "Alert") + " in " + (alert.zone_id || "Unknown Zone") + " — #" + alert.id;
+    var zoneName = alert.zone_name || alert.zone_id || "Unknown Zone";
+    var cameraName = alert.camera_name || alert.camera_id || "Unknown Camera";
+    modalTitle.textContent = (alert.object_type || "Alert") + " in " + zoneName + " — #" + alert.id;
 
     var html = '';
 
@@ -869,8 +893,8 @@ td {
     html += buildDetail("ID", "#" + alert.id);
     html += buildDetail("Severity", (alert.severity || "").toUpperCase());
     html += buildDetail("Object", alert.object_type);
-    html += buildDetail("Zone", alert.zone_id);
-    html += buildDetail("Camera", alert.camera_id);
+    html += buildDetail("Zone", zoneName);
+    html += buildDetail("Camera", cameraName);
     html += buildDetail("Status", (alert.status || "").toUpperCase());
     html += buildDetail("Created", fmtDateTime(alert.created_at));
     html += buildDetail("Last updated", fmtDateTime(alert.updated_at));

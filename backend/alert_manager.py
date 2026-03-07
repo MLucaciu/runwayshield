@@ -71,6 +71,7 @@ class AlertManager:
                 severity=severity,
                 gps_lat=v["gps_lat"],
                 gps_lng=v["gps_lng"],
+                zone_name=v.get("zone_name"),
             )
 
             if is_new:
