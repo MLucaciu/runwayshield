@@ -23,23 +23,17 @@
   },
   "camera_2": {
     "gps_corners": {
-      "top_left":     {"px": [0, 0],       "gps": [47.0372, 21.9478]},
-      "top_right":    {"px": [1024, 0],     "gps": [47.0372, 21.9498]},
-      "bottom_left":  {"px": [0, 576],      "gps": [47.0362, 21.9478]},
-      "bottom_right": {"px": [1024, 576],   "gps": [47.0362, 21.9498]}
+      "top_left":     {"px": [0, 586],     "gps": [47.028540, 21.901098]},
+      "top_right":    {"px": [900, 530],   "gps": [47.027476, 21.900853]},
+      "bottom_left":  {"px": [0, 950],     "gps": [47.028725, 21.899802]},
+      "bottom_right": {"px": [1001, 801],  "gps": [47.028278, 21.899684]}
     },
     "zones": [
       {
-        "id": "runway_right",
-        "name": "Runway Right",
-        "polygon": [[560, 260], [1000, 230], [1024, 520], [600, 540]],
-        "severity_override": null
-      },
-      {
-        "id": "apron_area",
-        "name": "Apron Area",
-        "polygon": [[50, 350], [550, 320], [580, 560], [50, 576]],
-        "severity_override": "low"
+        "id": "critical_area",
+        "name": "Critical Area",
+        "polygon": [[0, 586], [900, 530], [1001, 801], [0, 950]],
+        "severity_override": "high"
       }
     ]
   }

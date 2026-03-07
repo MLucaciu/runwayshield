@@ -291,10 +291,10 @@ def acknowledge_alert(alert_id):
     if not result:
         return jsonify({"error": "Alert not found or already acknowledged/closed"}), 404
 
-    # If no more active severe alerts remain, turn off LED + buzzer
+    # If no more active severe/high alerts remain, turn off LED + buzzer
     if _esp_sensor and _alerts_db:
         remaining = [a for a in _alerts_db.query_live()
-                     if a["status"] == "active" and a["severity"] == "severe"]
+                     if a["status"] == "active" and a["severity"] in ("severe", "high")]
         if not remaining:
             _esp_sensor.set_led(False)
             _esp_sensor.set_buzzer(False)

@@ -76,7 +76,7 @@ class AlertManager:
             if is_new:
                 if self._mqtt:
                     self._publish("alert_new", alert)
-                if severity == "severe" and self._esp:
+                if severity in ("severe", "high") and self._esp:
                     self._esp.set_led(True)
                     self._esp.set_buzzer(True)
 
@@ -101,6 +101,14 @@ class AlertManager:
                 if self._mqtt:
                     alert["status"] = "closed"
                     self._publish("alert_closed", alert)
+
+                # Turn off LED+buzzer if no active severe/high alerts remain
+                if self._esp and alert.get("severity") in ("severe", "high"):
+                    remaining = [a for a in self._db.find_open_alerts(camera_id)
+                                 if a["severity"] in ("severe", "high")]
+                    if not remaining:
+                        self._esp.set_led(False)
+                        self._esp.set_buzzer(False)
 
     def acknowledge(self, alert_id, username):
         """Acknowledge an alert. Returns the updated alert dict or None."""
