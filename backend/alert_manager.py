@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 
 
 SEVERITY_MAP = {
-    "person": "severe",
-    "car": "severe",
-    "truck": "severe",
-    "bus": "severe",
+    "person": "high",
+    "car": "high",
+    "truck": "high",
+    "bus": "high",
     "dog": "medium",
     "cat": "medium",
     "bird": "medium",
@@ -77,7 +77,7 @@ class AlertManager:
             if is_new:
                 if self._mqtt:
                     self._publish("alert_new", alert)
-                if severity in ("severe", "high") and self._esp:
+                if severity == "high" and self._esp:
                     self._esp.set_led(True)
                     self._esp.set_buzzer(True)
 
@@ -106,9 +106,9 @@ class AlertManager:
                     self._publish(event, alert)
 
                 # Turn off LED+buzzer if no active severe/high alerts remain
-                if self._esp and alert.get("severity") in ("severe", "high"):
+                if self._esp and alert.get("severity") == "high":
                     remaining = [a for a in self._db.find_open_alerts(camera_id)
-                                 if a["severity"] in ("severe", "high")]
+                                 if a["severity"] == "high"]
                     if not remaining:
                         self._esp.set_led(False)
                         self._esp.set_buzzer(False)

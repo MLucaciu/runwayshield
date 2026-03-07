@@ -17,7 +17,7 @@
         "id": "taxiway_alpha",
         "name": "Taxiway Alpha",
         "polygon": [[850, 300], [1200, 300], [1200, 550], [850, 550]],
-        "severity_override": "low"
+        "severity_override": "high"
       }
     ]
   },

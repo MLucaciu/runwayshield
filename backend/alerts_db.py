@@ -202,7 +202,7 @@ class AlertsDB:
                 "SELECT * FROM alerts "
                 "WHERE status IN ('active', 'acknowledged') "
                 "ORDER BY "
-                "  CASE severity WHEN 'severe' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
+                "  CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
                 "  created_at DESC"
             ).fetchall()
         ]

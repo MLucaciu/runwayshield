@@ -6,6 +6,8 @@
   <title>Reports — Runway Shield</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -365,7 +367,7 @@ td {
   text-transform: uppercase;
 }
 
-.sev-severe { color: var(--sev-red); background: rgba(240,72,88,0.12); border: 1px solid rgba(240,72,88,0.2); }
+.sev-high { color: var(--sev-red); background: rgba(240,72,88,0.12); border: 1px solid rgba(240,72,88,0.2); }
 .sev-medium { color: var(--sev-amber); background: rgba(240,160,48,0.12); border: 1px solid rgba(240,160,48,0.2); }
 .sev-low { color: var(--sev-blue); background: rgba(56,189,210,0.12); border: 1px solid rgba(56,189,210,0.2); }
 
@@ -658,9 +660,121 @@ td {
 ::-webkit-scrollbar-thumb { background: var(--bg-scrollbar-thumb); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--bg-scrollbar-thumb-hover); }
 
+/* ── Show on Map Button ──────────────────────────────────────────── */
+.btn-map {
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(56,189,210,0.3);
+  background: rgba(56,189,210,0.1);
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.18s;
+  outline: none;
+  display: none;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.btn-map:hover {
+  background: rgba(56,189,210,0.2);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.btn-map.visible { display: inline-flex; }
+
+/* ── Map Modal ───────────────────────────────────────────────────── */
+.map-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: var(--bg-modal-overlay);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s, visibility 0.25s;
+}
+
+.map-modal-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.map-modal {
+  background: var(--bg-modal);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-accent);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(56,189,210,0.06);
+  width: 92%;
+  max-width: 1000px;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.96) translateY(8px);
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.map-modal-overlay.open .map-modal {
+  transform: scale(1) translateY(0);
+}
+
+.map-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border-accent-subtle);
+  flex-shrink: 0;
+}
+
+.map-modal-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.map-modal-count {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--accent-light);
+  background: var(--accent-bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-accent);
+  margin-left: 0.5rem;
+}
+
+.map-modal-body {
+  flex: 1;
+  position: relative;
+}
+
+#mapModalMap {
+  width: 100%;
+  height: 100%;
+}
+
+.alert-map-pin {
+  background: none !important;
+  border: none !important;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+}
+
+.leaflet-popup-content {
+  font-family: var(--font-ui);
+}
+
 @media (max-width: 768px) {
   .content { padding: 0.75rem; }
   .modal { width: 96%; max-height: 95vh; }
+  .map-modal { width: 96%; height: 85vh; }
   .modal-details { grid-template-columns: repeat(2, 1fr); }
   table { font-size: 0.68rem; }
   td, thead th { padding: 0.45rem 0.55rem; }
@@ -711,7 +825,7 @@ td {
       <div class="toolbar-row">
         <select class="filter-select" id="filterSeverity">
           <option value="">All severities</option>
-          <option value="severe">Severe</option>
+          <option value="high">High</option>
           <option value="medium">Medium</option>
           <option value="low">Low</option>
         </select>
@@ -728,6 +842,10 @@ td {
           <option value="">All objects</option>
         </select>
         <div class="toolbar-spacer"></div>
+        <button class="btn-map" id="btnShowMap">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="mapLabel">Show on Map</span>
+        </button>
         <button class="btn-delete" id="btnDeleteSelected">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           <span id="deleteLabel">Delete selected</span>
@@ -789,6 +907,22 @@ td {
         <div class="modal-body" id="modalBody"></div>
       </div>
     </div>
+
+    <!-- Map modal -->
+    <div class="map-modal-overlay" id="mapModalOverlay">
+      <div class="map-modal">
+        <div class="map-modal-header">
+          <div style="display:flex;align-items:center;">
+            <span class="map-modal-title">Alert Locations</span>
+            <span class="map-modal-count" id="mapAlertCount">0 alerts</span>
+          </div>
+          <button class="modal-close" id="mapModalClose">&times;</button>
+        </div>
+        <div class="map-modal-body">
+          <div id="mapModalMap"></div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -825,7 +959,15 @@ td {
   var pgNumbers = document.getElementById("pgNumbers");
   var pgInfo = document.getElementById("paginationInfo");
 
-  var SEV_ORDER = { severe: 0, medium: 1, low: 2 };
+  var btnShowMap = document.getElementById("btnShowMap");
+  var mapLabel = document.getElementById("mapLabel");
+  var mapModalOverlay = document.getElementById("mapModalOverlay");
+  var mapModalClose = document.getElementById("mapModalClose");
+  var mapAlertCount = document.getElementById("mapAlertCount");
+  var mapInstance = null;
+  var mapMarkers = [];
+
+  var SEV_ORDER = { high: 0, medium: 1, low: 2 };
 
   // ── Theme ──────────────────────────────────────────────────────
   var theme = localStorage.getItem("rws-theme") || "dark";
@@ -957,8 +1099,11 @@ td {
     if (count > 0) {
       btnDeleteSelected.classList.add("visible");
       deleteLabel.textContent = "Delete selected (" + count + ")";
+      btnShowMap.classList.add("visible");
+      mapLabel.textContent = "Show on Map (" + count + ")";
     } else {
       btnDeleteSelected.classList.remove("visible");
+      btnShowMap.classList.remove("visible");
     }
     btnDeleteAll.classList.toggle("visible", reports.length > 0);
   }
@@ -1284,6 +1429,108 @@ td {
            esc(label) + '</span><span class="modal-detail-value">' +
            esc(value || "\u2014") + '</span></div>';
   }
+
+  // ── Map Modal ─────────────────────────────────────────────────
+  var SEV_COLORS = { high: "#f04858", medium: "#f0a030", low: "#38bdd2" };
+
+  function makeAlertPinSvg(color) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42" width="28" height="36">' +
+      '<path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="' + color + '"/>' +
+      '<path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>' +
+      '<circle cx="16" cy="15" r="7" fill="rgba(255,255,255,0.9)"/>' +
+      '<text x="16" y="19" text-anchor="middle" font-size="10" font-weight="bold" font-family="sans-serif" fill="' + color + '">!</text>' +
+      '</svg>';
+  }
+
+  function closeMapModal() {
+    mapModalOverlay.classList.remove("open");
+    if (mapInstance) {
+      mapInstance.remove();
+      mapInstance = null;
+    }
+    mapMarkers = [];
+  }
+
+  mapModalClose.addEventListener("click", closeMapModal);
+  mapModalOverlay.addEventListener("click", function(e) {
+    if (e.target === mapModalOverlay) closeMapModal();
+  });
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape" && mapModalOverlay.classList.contains("open")) closeMapModal();
+  });
+
+  btnShowMap.addEventListener("click", function() {
+    var selected = reports.filter(function(r) { return selectedIds.has(r.id); });
+    var withGps = selected.filter(function(r) { return r.gps_lat != null && r.gps_lng != null; });
+
+    if (!withGps.length) {
+      alert("None of the selected alerts have GPS coordinates.");
+      return;
+    }
+
+    mapAlertCount.textContent = withGps.length + " alert" + (withGps.length !== 1 ? "s" : "");
+    mapModalOverlay.classList.add("open");
+
+    setTimeout(function() {
+      if (mapInstance) {
+        mapInstance.remove();
+        mapInstance = null;
+      }
+      mapMarkers = [];
+
+      mapInstance = L.map("mapModalMap", {
+        zoomControl: true,
+        scrollWheelZoom: true,
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a>',
+        maxZoom: 19,
+      }).addTo(mapInstance);
+
+      var bounds = [];
+      withGps.forEach(function(r) {
+        var latlng = [r.gps_lat, r.gps_lng];
+        bounds.push(latlng);
+
+        var color = SEV_COLORS[r.severity] || SEV_COLORS.medium;
+        var icon = L.divIcon({
+          html: makeAlertPinSvg(color),
+          className: "alert-map-pin",
+          iconSize: [28, 36],
+          iconAnchor: [14, 36],
+          popupAnchor: [0, -34],
+        });
+
+        var marker = L.marker(latlng, { icon: icon }).addTo(mapInstance);
+
+        var sevLabel = (r.severity || "").toUpperCase();
+        var zoneName = r.zone_name || r.zone_id || "—";
+        var camName = r.camera_name || r.camera_id || "—";
+
+        marker.bindPopup(
+          '<div style="min-width:150px;font-family:\'DM Sans\',sans-serif;">' +
+            '<div style="font-weight:700;font-size:12px;margin-bottom:4px;">Alert #' + r.id + '</div>' +
+            '<div style="font-size:11px;margin-bottom:2px;"><strong>Object:</strong> ' + esc(r.object_type) + '</div>' +
+            '<div style="font-size:11px;margin-bottom:2px;"><strong>Zone:</strong> ' + esc(zoneName) + '</div>' +
+            '<div style="font-size:11px;margin-bottom:2px;"><strong>Camera:</strong> ' + esc(camName) + '</div>' +
+            '<div style="font-size:11px;margin-bottom:2px;"><strong>Severity:</strong> ' +
+              '<span style="color:' + color + ';font-weight:600;">' + esc(sevLabel) + '</span></div>' +
+            '<div style="font-size:11px;margin-bottom:2px;"><strong>Status:</strong> ' + esc((r.status || "").toUpperCase()) + '</div>' +
+            '<div style="font-size:10px;opacity:0.6;margin-top:4px;">' +
+              r.gps_lat.toFixed(5) + ', ' + r.gps_lng.toFixed(5) + '</div>' +
+          '</div>'
+        );
+        mapMarkers.push(marker);
+      });
+
+      if (bounds.length === 1) {
+        mapInstance.setView(bounds[0], 17);
+      } else {
+        mapInstance.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+      }
+    }, 100);
+  });
 
   // ── Init ───────────────────────────────────────────────────────
   loadReports();

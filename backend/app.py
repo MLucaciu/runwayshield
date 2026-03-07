@@ -29,12 +29,10 @@ CAMERA_CONFIG = {
     "camera_1": {
         "url": os.environ.get("CAMERA_1_URL", "0"),
         "name": "Runway Main",
-        "location": {"lat": 47.0365, "lng": 21.9484},
     },
     "camera_2": {
         "url": os.environ.get("CAMERA_2_URL", "http://10.94.117.76:8080/video"),
         "name": "Runway Side",
-        "location": {"lat": 49.0365, "lng": 21.9484},
     },
 }
 
@@ -147,7 +145,6 @@ def _camera_json(cam_id):
         "online": online,
         "connected": cam.connected if cam else False,
         "detection_enabled": cam.has_detector if cam else False,
-        "location": cfg.get("location"),
         "buffer_start": cam.buffer_start_time().isoformat() if cam and cam.buffer_start_time() else None,
         "segments": cam.list_segments() if cam else [],
         "annotated_segments": cam.list_segments(annotated=True) if cam else [],
@@ -325,7 +322,7 @@ def acknowledge_alert(alert_id):
     # If no more active severe/high alerts remain, turn off LED + buzzer
     if _esp_sensor and _alerts_db:
         remaining = [a for a in _alerts_db.query_live()
-                     if a["status"] == "active" and a["severity"] in ("severe", "high")]
+                     if a["status"] == "active" and a["severity"] == "high"]
         if not remaining:
             _esp_sensor.set_led(False)
             _esp_sensor.set_buzzer(False)
