@@ -81,6 +81,19 @@ Go to **http://localhost:3000**.
 | `GET /api/notifications/live` | Live alerts |
 | `GET /api/airport-info` | Airport and runway metadata |
 
+### Camera Emulator (optional)
+
+Loops a video file as an MJPEG stream to emulate a live camera. See [`cam_emulator/README.md`](cam_emulator/README.md) for details.
+
+```bash
+cd cam_emulator
+pip install -r requirements.txt
+./run.sh               # MJPEG stream on :8554
+
+# Then point the backend at it:
+CAMERA_1_URL=http://localhost:8554/video
+```
+
 ## Running tests
 
 ```bash
@@ -105,6 +118,7 @@ frontend/
   src/App.js          Main React dashboard component
   src/                Components & styles
   public/             Static assets
+cam_emulator/         Standalone MJPEG camera emulator (loops a video file)
 models_testing/       Standalone ML experiments
 .devcontainer/        Dev Container config
 ```
@@ -113,8 +127,9 @@ models_testing/       Standalone ML experiments
 
 | Service  | Port | URL                  |
 |----------|------|----------------------|
-| Frontend | 3000 | http://localhost:3000 |
-| Backend  | 8081 | http://localhost:8081 |
+| Frontend       | 3000 | http://localhost:3000 |
+| Backend        | 8081 | http://localhost:8081 |
+| Cam Emulator   | 8554 | http://localhost:8554 |
 
 ## Environment Variables
 
