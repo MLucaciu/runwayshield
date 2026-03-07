@@ -408,6 +408,59 @@
   font-style: italic;
 }
 
+/* ── Annotation toggle ─────────────────────────────────────────── */
+.annotation-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  margin-right: 0.25rem;
+}
+
+.annotation-label {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  transition: color 0.2s;
+}
+
+.annotation-toggle:hover .annotation-label {
+  color: var(--text-secondary);
+}
+
+.annotation-track {
+  width: 32px;
+  height: 17px;
+  border-radius: 9px;
+  background: var(--border-ctrl);
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+
+.annotation-track.on {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.annotation-knob {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: left 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.annotation-track.on .annotation-knob {
+  left: 17px;
+}
+
 /* ── Mode badge ────────────────────────────────────────────────── */
 .panel-header-right {
   display: flex;
@@ -600,7 +653,9 @@
   flex-direction: column;
   gap: 1px;
   background: var(--bg-grid-gap);
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .cam-thumb {

@@ -120,6 +120,7 @@ export default function App() {
   const [seekSeconds, setSeekSeconds] = useState(0);
   const [streamSrc, setStreamSrc] = useState("");
   const [activeSegment, setActiveSegment] = useState(null);
+  const [annotated, setAnnotated] = useState(false);
   const imgRef = useRef(null);
   const vidRef = useRef(null);
   const lastFrameRef = useRef(Date.now());
@@ -166,22 +167,24 @@ export default function App() {
       return;
     }
     if (mode === "live") {
-      const url = seekSeconds > 0
-        ? `/api/stream/${activeCamId}/live?offset=${seekSeconds}`
-        : `/api/stream/${activeCamId}/live`;
-      setStreamSrc(url);
+      const params = new URLSearchParams();
+      if (seekSeconds > 0) params.set("offset", seekSeconds);
+      if (annotated) params.set("annotated", "1");
+      const qs = params.toString();
+      setStreamSrc(`/api/stream/${activeCamId}/live${qs ? `?${qs}` : ""}`);
     }
-  }, [activeCamId, mode, seekSeconds]);
+  }, [activeCamId, mode, seekSeconds, annotated]);
 
   // Reconnect the MJPEG stream with a cache-busting param
   const reconnectStream = useCallback(() => {
     if (!activeCamId || mode !== "live") return;
-    const base = seekSeconds > 0
-      ? `/api/stream/${activeCamId}/live?offset=${seekSeconds}`
-      : `/api/stream/${activeCamId}/live`;
-    setStreamSrc(base + (base.includes("?") ? "&" : "?") + "_t=" + Date.now());
+    const params = new URLSearchParams();
+    if (seekSeconds > 0) params.set("offset", seekSeconds);
+    if (annotated) params.set("annotated", "1");
+    params.set("_t", Date.now());
+    setStreamSrc(`/api/stream/${activeCamId}/live?${params}`);
     lastFrameRef.current = Date.now();
-  }, [activeCamId, mode, seekSeconds]);
+  }, [activeCamId, mode, seekSeconds, annotated]);
 
   // Staleness check: if no MJPEG frame received in 5s, force reconnect
   useEffect(() => {
@@ -219,7 +222,9 @@ export default function App() {
       setMode("history");
       setSeekSeconds(seconds);
       const t = (Date.now() / 1000) - seconds;
-      setStreamSrc(`/api/stream/${activeCamId}/history?t=${t}`);
+      const params = new URLSearchParams({ t });
+      if (annotated) params.set("annotated", "1");
+      setStreamSrc(`/api/stream/${activeCamId}/history?${params}`);
     }
   };
 
@@ -230,7 +235,9 @@ export default function App() {
     setSeekSeconds(0);
     const segDate = parseSegmentTimestamp(segName);
     const t = segDate.getTime() / 1000;
-    setStreamSrc(`/api/stream/${activeCamId}/history?t=${t}`);
+    const params = new URLSearchParams({ t });
+    if (annotated) params.set("annotated", "1");
+    setStreamSrc(`/api/stream/${activeCamId}/history?${params}`);
   };
 
   const handleCamSwitch = (cam) => {
@@ -345,6 +352,19 @@ export default function App() {
                   <div className="panel-header">
                     <span className="panel-title">Camera view</span>
                     <div className="panel-header-right">
+                      <div
+                        className="annotation-toggle"
+                        onClick={() => setAnnotated((v) => !v)}
+                        role="switch"
+                        aria-checked={annotated}
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAnnotated((v) => !v); } }}
+                      >
+                        <span className="annotation-label">Annotations</span>
+                        <div className={`annotation-track${annotated ? " on" : ""}`}>
+                          <div className="annotation-knob" />
+                        </div>
+                      </div>
                       {activeCam && <span className="panel-badge">{activeCam.name}</span>}
                       <span className={`mode-badge ${mode === "live" && !seekSeconds ? "mode-live" : "mode-playback"}`}>
                         {mode === "live" && !seekSeconds ? "LIVE" : seekSeconds ? `-${seekSeconds}s` : "REC"}
