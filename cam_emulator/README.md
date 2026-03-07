@@ -25,7 +25,7 @@ Only dependency is `opencv-python-headless`.
 Or directly:
 
 ```bash
-python emulator.py --video videos/sample.mp4 --port 8554
+python emulator.py --video video_cam_1/sample.mp4 --port 8554
 ```
 
 ## Endpoints

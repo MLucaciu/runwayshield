@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Start the camera emulator
-# Usage: ./run.sh [--video path/to/video.mp4] [--port 8554] [--fps 25]
+# Start the camera emulator (two feeds: port 8554 + 8555)
 #
 # Automatically creates a venv and installs dependencies if needed.
 set -e
