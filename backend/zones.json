@@ -1,0 +1,46 @@
+{
+  "camera_1": {
+    "gps_corners": {
+      "top_left":     {"px": [0, 0],       "gps": [47.0370, 21.9470]},
+      "top_right":    {"px": [1920, 0],     "gps": [47.0370, 21.9500]},
+      "bottom_left":  {"px": [0, 1080],     "gps": [47.0360, 21.9470]},
+      "bottom_right": {"px": [1920, 1080],  "gps": [47.0360, 21.9500]}
+    },
+    "zones": [
+      {
+        "id": "runway_main",
+        "name": "Runway 09/27",
+        "polygon": [[100, 200], [800, 200], [800, 600], [100, 600]],
+        "severity_override": null
+      },
+      {
+        "id": "taxiway_alpha",
+        "name": "Taxiway Alpha",
+        "polygon": [[850, 300], [1200, 300], [1200, 550], [850, 550]],
+        "severity_override": "low"
+      }
+    ]
+  },
+  "camera_2": {
+    "gps_corners": {
+      "top_left":     {"px": [0, 0],       "gps": [47.0372, 21.9478]},
+      "top_right":    {"px": [1024, 0],     "gps": [47.0372, 21.9498]},
+      "bottom_left":  {"px": [0, 576],      "gps": [47.0362, 21.9478]},
+      "bottom_right": {"px": [1024, 576],   "gps": [47.0362, 21.9498]}
+    },
+    "zones": [
+      {
+        "id": "runway_right",
+        "name": "Runway Right",
+        "polygon": [[560, 260], [1000, 230], [1024, 520], [600, 540]],
+        "severity_override": null
+      },
+      {
+        "id": "apron_area",
+        "name": "Apron Area",
+        "polygon": [[50, 350], [550, 320], [580, 560], [50, 576]],
+        "severity_override": "low"
+      }
+    ]
+  }
+}

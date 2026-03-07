@@ -121,6 +121,8 @@ export default function App() {
   const [streamSrc, setStreamSrc] = useState("");
   const [activeSegment, setActiveSegment] = useState(null);
   const [annotated, setAnnotated] = useState(false);
+  const [showZones, setShowZones] = useState(false);
+  const [zoneAlerts, setZoneAlerts] = useState([]);
   const imgRef = useRef(null);
   const vidRef = useRef(null);
   const lastFrameRef = useRef(Date.now());
@@ -129,23 +131,26 @@ export default function App() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [camRes, alertRes, liveRes, statusRes, infoRes] = await Promise.all([
+      const [camRes, alertRes, liveRes, statusRes, infoRes, zoneAlertRes] = await Promise.all([
         fetch("/api/cameras"),
         fetch("/api/notifications/history"),
         fetch("/api/notifications/live"),
         fetch("/api/status"),
         fetch("/api/airport-info"),
+        fetch("/api/alerts/live"),
       ]);
       const camData = await camRes.json();
       const alertData = await alertRes.json();
       const liveData = await liveRes.json();
       const statusData = await statusRes.json();
       const infoData = await infoRes.json();
+      const zoneAlertData = await zoneAlertRes.json();
       setCameras(camData);
       setAlerts(alertData);
       setLiveAlerts(liveData);
       setBackendOk(statusData.status === "ok");
       setAirportInfo(infoData);
+      setZoneAlerts(zoneAlertData);
       setActiveCamId((prev) => {
         if (!prev && camData.length) return camData[0].id;
         return prev;
@@ -170,10 +175,11 @@ export default function App() {
       const params = new URLSearchParams();
       if (seekSeconds > 0) params.set("offset", seekSeconds);
       if (annotated) params.set("annotated", "1");
+      if (showZones) params.set("zones", "1");
       const qs = params.toString();
       setStreamSrc(`/api/stream/${activeCamId}/live${qs ? `?${qs}` : ""}`);
     }
-  }, [activeCamId, mode, seekSeconds, annotated]);
+  }, [activeCamId, mode, seekSeconds, annotated, showZones]);
 
   // Reconnect the MJPEG stream with a cache-busting param
   const reconnectStream = useCallback(() => {
@@ -181,10 +187,11 @@ export default function App() {
     const params = new URLSearchParams();
     if (seekSeconds > 0) params.set("offset", seekSeconds);
     if (annotated) params.set("annotated", "1");
+    if (showZones) params.set("zones", "1");
     params.set("_t", Date.now());
     setStreamSrc(`/api/stream/${activeCamId}/live?${params}`);
     lastFrameRef.current = Date.now();
-  }, [activeCamId, mode, seekSeconds, annotated]);
+  }, [activeCamId, mode, seekSeconds, annotated, showZones]);
 
   // Staleness check: if no MJPEG frame received in 5s, force reconnect
   useEffect(() => {
@@ -224,6 +231,7 @@ export default function App() {
       const t = (Date.now() / 1000) - seconds;
       const params = new URLSearchParams({ t });
       if (annotated) params.set("annotated", "1");
+      if (showZones) params.set("zones", "1");
       setStreamSrc(`/api/stream/${activeCamId}/history?${params}`);
     }
   };
@@ -237,6 +245,7 @@ export default function App() {
     const t = segDate.getTime() / 1000;
     const params = new URLSearchParams({ t });
     if (annotated) params.set("annotated", "1");
+    if (showZones) params.set("zones", "1");
     setStreamSrc(`/api/stream/${activeCamId}/history?${params}`);
   };
 
@@ -245,6 +254,17 @@ export default function App() {
     setActiveCamId(cam.id);
     goLive();
   };
+
+  const acknowledgeAlert = useCallback(async (alertId) => {
+    try {
+      await fetch(`/api/alerts/${alertId}/acknowledge`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acknowledged_by: "operator" }),
+      });
+      fetchData();
+    } catch { /* ignore */ }
+  }, [fetchData]);
 
   const mapCenter = activeCam?.location
     ? [activeCam.location.lat, activeCam.location.lng]
@@ -365,6 +385,19 @@ export default function App() {
                           <div className="annotation-knob" />
                         </div>
                       </div>
+                      <div
+                        className="annotation-toggle"
+                        onClick={() => setShowZones((v) => !v)}
+                        role="switch"
+                        aria-checked={showZones}
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setShowZones((v) => !v); } }}
+                      >
+                        <span className="annotation-label">Zones</span>
+                        <div className={`annotation-track${showZones ? " on" : ""}`}>
+                          <div className="annotation-knob" />
+                        </div>
+                      </div>
                       {activeCam && <span className="panel-badge">{activeCam.name}</span>}
                       <span className={`mode-badge ${mode === "live" && !seekSeconds ? "mode-live" : "mode-playback"}`}>
                         {mode === "live" && !seekSeconds ? "LIVE" : seekSeconds ? `-${seekSeconds}s` : "REC"}
@@ -411,7 +444,18 @@ export default function App() {
                   )}
 
                   <div className="alert-ticker">
-                    {alertsForCam.length > 0 ? (
+                    {zoneAlerts.length > 0 ? (
+                      zoneAlerts.map((a) => {
+                        const sev = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.low;
+                        return (
+                          <span key={`za-${a.id}`} className="ticker-item" style={{ borderColor: sev.color, background: sev.bg }}>
+                            <span className="ticker-dot" style={{ background: sev.color }} />
+                            <span className="ticker-class">{a.object_type} in {a.zone_id}</span>
+                            <span className="ticker-sev" style={{ color: sev.color }}>{sev.label}</span>
+                          </span>
+                        );
+                      })
+                    ) : alertsForCam.length > 0 ? (
                       alertsForCam.map((a) => {
                         const sev = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.low;
                         return (
@@ -566,14 +610,14 @@ export default function App() {
 
             <div className="bottom-alerts-panel panel">
               <div className="panel-header">
-                <span className="panel-title">Alerts</span>
-                <button className="show-all-btn">Show all</button>
+                <span className="panel-title">Zone Alerts</span>
+                <span className="panel-count">{zoneAlerts.length}</span>
               </div>
               <div className="bottom-alerts-list">
-                {alerts.length === 0 && (
-                  <div className="alerts-empty">No alerts recorded</div>
+                {zoneAlerts.length === 0 && (
+                  <div className="alerts-empty">No active zone alerts</div>
                 )}
-                {alerts.map((a) => {
+                {zoneAlerts.map((a) => {
                   const sev = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.low;
                   return (
                     <div
@@ -582,10 +626,18 @@ export default function App() {
                       style={{ borderLeftColor: sev.color }}
                     >
                       <div className="bottom-alert-content">
-                        <span className="bottom-alert-msg">{a.classification}</span>
+                        <span className="bottom-alert-msg">{a.object_type} in {a.zone_id}</span>
                         <span className={`bottom-alert-status status-${a.status}`}>{a.status?.toUpperCase()}</span>
                       </div>
-                      <span className="bottom-alert-time">{formatAlertTime(a.timestamp_start) || timeAgo(a.timestamp_start)}</span>
+                      <div className="bottom-alert-actions">
+                        <span className="bottom-alert-time">{formatAlertTime(a.created_at) || timeAgo(a.created_at)}</span>
+                        {a.status === "active" && (
+                          <button className="ack-btn-react" onClick={() => acknowledgeAlert(a.id)}>ACK</button>
+                        )}
+                        {a.status === "acknowledged" && (
+                          <span className="ack-label">{a.acknowledged_by}</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

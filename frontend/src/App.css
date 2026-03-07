@@ -901,6 +901,13 @@
 .status-solved  { color: var(--status-green); }
 .status-invalid { color: var(--sev-red); }
 
+.bottom-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
 .bottom-alert-time {
   font-size: 0.62rem;
   color: var(--text-muted);
@@ -908,6 +915,39 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+.ack-btn-react {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border-ctrl);
+  border-radius: var(--radius-sm);
+  background: var(--bg-ctrl-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.ack-btn-react:hover {
+  background: var(--accent-bg-strong);
+  border-color: var(--accent);
+  color: var(--accent-light);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.ack-label {
+  font-size: 0.56rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.status-active { color: var(--sev-red); }
+.status-acknowledged { color: var(--sev-amber); }
+.status-closed { color: var(--text-dim); }
 
 /* ── Old alert styles (kept for compatibility) ─────────────────── */
 .alerts-empty {

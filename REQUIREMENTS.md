@@ -98,20 +98,36 @@ After user validation, actions per severity:
 - Returns the MP4 segment file covering the given timestamp
 - Backend matches timestamp against wall-clock-aligned segment filenames
 
-#### Notification stubs
-- `GET /api/notifications/live` — returns `[]` (stub)
-- `GET /api/notifications/history` — returns `[]` (stub)
+#### Live notifications (next)
+`GET /api/notifications/live`
+- Returns all active notifications where `timestamp_end IS NULL`
+- Response: JSON array of notification objects (see §4 data model)
+- Also pushed in real-time via MQTT to topic `runway-shield/notifications`
 
-### Planned (not yet implemented)
+#### Historical notifications (next)
+`GET /api/notifications/history`
+- Query params: `type`, `severity`, `source`, `status`, `from`, `to`
+- Paginated, sorted by `timestamp_start` desc
+- Response: `{ "notifications": [...], "total": N, "page": N }`
 
-#### Validate notification
+#### Validate notification (next)
 `PATCH /api/notifications/<id>/validate`
 - Body: `{ "status": "valid" | "invalid", "validated_by": "username" }`
+- Sets `validated_at` to current time
+- On validation, triggers severity-based action (see §5)
 
-#### Trigger action
+#### Trigger action (next)
 `POST /api/notifications/<id>/action`
 - Body: `{ "action": "deploy_robot" | "enhance_image" | "night_to_day" }`
-- Sends ESPHome command if applicable (e.g., robot dispatch)
+- Sets `action_taken` and `action_at` on the notification
+- Publishes MQTT command if applicable (e.g., robot dispatch)
+
+#### Detection history (next)
+`GET /api/detections/<camera_id>`
+- Query params: `limit` (default 100), `from` (ISO datetime), `to` (ISO datetime)
+- Returns per-frame detection metadata from SQLite
+
+### Planned (not yet implemented)
 
 #### Heatmap
 - Endpoint returning aggregated `{x, y, count}` data for historical debris/hazard locations
@@ -121,11 +137,10 @@ After user validation, actions per severity:
 
 ## 7. Live Streaming
 
-- **Video**: MJPEG stream served from Flask backend (annotations not yet applied)
-- **Real-time events** (planned): Socket.IO (Flask-SocketIO) pushes:
-  - New/updated notifications
-  - Map object position updates
-  - Alert feed updates
+- **Video**: MJPEG stream served from Flask backend with YOLO annotations
+- **Real-time events** (next): MQTT publishes to `runway-shield/notifications` topic:
+  - New/updated notifications (with severity, classification, source)
+  - Frontend subscribes via MQTT-over-WebSocket or polls `/api/notifications/live`
 - **Evidence linking**: notifications store `source` + `timestamp_start`/`timestamp_end`; the UI resolves this to the correct video stream for playback
 
 ## 8. Video Storage & Playback
@@ -155,7 +170,7 @@ Two-layer design to support both near-live rewind and historical playback:
 - **Reconnect recovery**: on successful reconnect, logs the event and resumes recording to a new segment
 - `connected` status exposed via `/api/cameras` for frontend status display
 
-### Annotations (planned — SQLite)
+### Annotations (next — SQLite)
 
 `detections` table — decoupled from video files:
 
@@ -179,10 +194,11 @@ IP Camera (MJPEG) or webcam (device index)
   → ring buffer (deque, 45s)              ← Layer 1 (live + offset)
   → VideoWriter (raw 30s MP4 → disk)      ← Layer 2 (historical)
   → MJPEG live stream endpoint
-  [planned] → YOLO .track(frame) → annotated frame
-  [planned] → VideoWriter (annotated 30s MP4 → disk)
-  [planned] → insert detection metadata → SQLite
-  [planned] → emit Socket.IO event (if notification triggered)
+  → YOLO .track(frame) → annotated frame
+  [next] → VideoWriter (annotated 30s MP4 → disk)
+  [next] → insert detection metadata → SQLite
+  [next] → create/update notification in SQLite (if new object or severity change)
+  [next] → publish MQTT message to runway-shield/notifications
 ```
 
 ## 9. Frontend (implemented)
@@ -199,8 +215,9 @@ Jinja2 template served at `/` with:
 
 ## 10. Metadata Storage
 
-- **SQLite** (planned): notifications, detections (per-frame), sensor readings, map coordinates
+- **SQLite** (next): `notifications` table (see §4) + `detections` table (see §8 Annotations) — created on startup if not present
 - **Filesystem** (implemented): video segments (`videos/{camera_id}/raw/{timestamp}.mp4`)
+- **MQTT** (next): broker for real-time notification delivery (topic `runway-shield/notifications`)
 
 ## 11. Map & Heatmap
 
@@ -226,10 +243,11 @@ Jinja2 template served at `/` with:
 
 | Layer | Technology |
 |---|---|
-| Backend | Flask, Flask-CORS (Flask-SocketIO planned) |
+| Backend | Flask, Flask-CORS |
 | ML / Vision | Ultralytics YOLO (from `models_testing/`), ByteTrack, OpenCV |
-| Database | SQLite (planned) |
-| Frontend | Jinja2 template (React planned), Socket.IO client (planned) |
+| Database | SQLite (next) |
+| Real-time | MQTT broker + paho-mqtt (next) |
+| Frontend | React 19, MQTT.js for live alerts (next) |
 | Sensors | ESPHome REST API |
 | Metrics | Prometheus |
 | Video streaming | MJPEG (live), MP4 segments (historical) |

@@ -97,6 +97,57 @@
       width: 0%; transition: width 0.3s linear;
     }
     .segments .empty { color: #64748b; font-size: 13px; }
+
+    .alerts-section {
+      background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+      padding: 16px; margin-top: 16px;
+    }
+    .alerts-section h3 {
+      font-size: 14px; margin-bottom: 12px; color: #94a3b8;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .alerts-section .alert-count {
+      background: #dc2626; color: #fff; font-size: 11px; font-weight: 700;
+      padding: 1px 7px; border-radius: 10px; min-width: 20px; text-align: center;
+    }
+    .alerts-section .alert-count.zero { background: #475569; }
+    .alerts-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .alerts-table th {
+      text-align: left; padding: 6px 8px; color: #64748b; font-weight: 500;
+      border-bottom: 1px solid #334155; font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .alerts-table td {
+      padding: 8px; border-bottom: 1px solid #1e293b; vertical-align: middle;
+    }
+    .alerts-table tr:hover { background: rgba(59,130,246,0.06); }
+
+    .alert-dot {
+      width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    }
+    .alert-dot.active { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+    .alert-dot.acknowledged { background: #eab308; box-shadow: 0 0 6px #eab308; }
+    .alert-dot.closed { background: #64748b; }
+
+    .sev-badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+      text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .sev-badge.severe { background: rgba(239,68,68,0.2); color: #f87171; }
+    .sev-badge.medium { background: rgba(234,179,8,0.2); color: #facc15; }
+    .sev-badge.low { background: rgba(59,130,246,0.2); color: #60a5fa; }
+
+    .ack-btn {
+      background: #334155; color: #e2e8f0; border: 1px solid #475569;
+      padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;
+      transition: background 0.15s;
+    }
+    .ack-btn:hover { background: #475569; }
+    .ack-btn:disabled { opacity: 0.4; cursor: default; }
+
+    .alerts-empty { color: #64748b; font-size: 13px; padding: 12px 0; text-align: center; }
   </style>
 </head>
 <body>
@@ -135,6 +186,12 @@
           <div class="toggle-knob"></div>
         </div>
       </div>
+      <div class="toggle-switch" id="zonesToggle">
+        <label>Zones</label>
+        <div class="toggle-track" id="zonesToggleTrack">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
       <div class="spacer"></div>
       <label>Custom:</label>
       <input type="number" id="customOffset" class="offset-input" min="0" max="9999" value="0" placeholder="sec">
@@ -144,6 +201,27 @@
     <div class="segments">
       <h3>Recorded segments</h3>
       <ul id="segmentList"><li class="empty">No segments yet</li></ul>
+    </div>
+
+    <div class="alerts-section">
+      <h3>Zone Alerts <span class="alert-count zero" id="alertCount">0</span></h3>
+      <table class="alerts-table" id="alertsTable">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Severity</th>
+            <th>Zone</th>
+            <th>Object</th>
+            <th>GPS</th>
+            <th>Since</th>
+            <th>Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="alertsBody">
+          <tr><td colspan="8" class="alerts-empty">No active alerts</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -159,9 +237,12 @@
 
     const toggleTrack = document.getElementById("toggleTrack");
 
+    const zonesToggleTrack = document.getElementById("zonesToggleTrack");
+
     let currentCamera = null;
     let mode = "live";             // "live" | "history"
     let annotated = false;
+    let showZones = false;
     let segments = [];
     let activeSegmentIndex = -1;
     let progressTimer = null;
@@ -169,7 +250,16 @@
     toggleTrack.addEventListener("click", () => {
       annotated = !annotated;
       toggleTrack.classList.toggle("on", annotated);
-      // Re-apply current view with new annotation setting
+      if (mode === "live") {
+        seekTo(parseInt(document.getElementById("customOffset").value) || 0);
+      } else if (activeSegmentIndex >= 0) {
+        playSegmentByIndex(activeSegmentIndex);
+      }
+    });
+
+    zonesToggleTrack.addEventListener("click", () => {
+      showZones = !showZones;
+      zonesToggleTrack.classList.toggle("on", showZones);
       if (mode === "live") {
         seekTo(parseInt(document.getElementById("customOffset").value) || 0);
       } else if (activeSegmentIndex >= 0) {
@@ -248,6 +338,7 @@
         const params = new URLSearchParams();
         if (seconds > 0) params.set("offset", seconds);
         if (annotated) params.set("annotated", "1");
+        if (showZones) params.set("zones", "1");
         const qs = params.toString();
         const url = `/api/stream/${currentCamera}/live` + (qs ? `?${qs}` : "");
         imgFeed.src = url;
@@ -431,6 +522,72 @@
         statusText.textContent = "Backend offline";
       }
     }
+
+    // ---- Zone Alerts ----
+    const alertsBody = document.getElementById("alertsBody");
+    const alertCount = document.getElementById("alertCount");
+
+    function fmtTs(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    function fmtGps(lat, lng) {
+      if (lat == null || lng == null) return "—";
+      return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    }
+
+    async function acknowledgeAlert(id, btn) {
+      btn.disabled = true;
+      btn.textContent = "…";
+      try {
+        await fetch(`/api/alerts/${id}/acknowledge`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ acknowledged_by: "operator" }),
+        });
+        loadAlerts();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = "ACK";
+      }
+    }
+
+    async function loadAlerts() {
+      try {
+        const resp = await fetch("/api/alerts/live");
+        const alerts = await resp.json();
+
+        const count = alerts.length;
+        alertCount.textContent = count;
+        alertCount.className = "alert-count" + (count === 0 ? " zero" : "");
+
+        if (count === 0) {
+          alertsBody.innerHTML = '<tr><td colspan="8" class="alerts-empty">No active alerts</td></tr>';
+          return;
+        }
+
+        alertsBody.innerHTML = alerts.map(a => `
+          <tr>
+            <td><span class="alert-dot ${a.status}"></span></td>
+            <td><span class="sev-badge ${a.severity}">${a.severity}</span></td>
+            <td>${a.zone_id || "—"}</td>
+            <td>${a.object_type || "—"}</td>
+            <td style="font-family:monospace;font-size:12px">${fmtGps(a.gps_lat, a.gps_lng)}</td>
+            <td>${fmtTs(a.created_at)}</td>
+            <td>${fmtTs(a.updated_at)}</td>
+            <td>${a.status === "active"
+              ? `<button class="ack-btn" onclick="acknowledgeAlert(${a.id}, this)">ACK</button>`
+              : `<span style="font-size:11px;color:#64748b">${a.acknowledged_by || ""}</span>`
+            }</td>
+          </tr>
+        `).join("");
+      } catch (e) { /* ignore */ }
+    }
+
+    setInterval(loadAlerts, 3000);
+    loadAlerts();
 
     setInterval(loadSegments, 10000);
     setInterval(pollStatus, 3000);

@@ -3,6 +3,9 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 
+import cv2
+import numpy as np
+
 from flask import Flask, Response, jsonify, render_template, request, send_file
 from flask_cors import CORS
 
@@ -11,6 +14,9 @@ from detector import Detector
 from detections_db import DetectionsDB
 from notifications_db import NotificationsDB
 from mqtt_client import MQTTNotificationClient
+from alerts_db import AlertsDB
+from zone_checker import ZoneChecker
+from alert_manager import AlertManager
 
 app = Flask(__name__)
 CORS(app)
@@ -41,7 +47,10 @@ SOURCE_IP = os.environ.get("SOURCE_IP", None)  # auto-detected if not set
 
 _detections_db = None
 _notifications_db = None
+_alerts_db = None
 _mqtt_client = None
+_zone_checker = None
+_alert_manager = None
 
 
 def _shutdown():
@@ -56,6 +65,7 @@ atexit.register(_shutdown)
 
 def start_cameras():
     global _cameras_started, _detections_db, _notifications_db, _mqtt_client
+    global _alerts_db, _zone_checker, _alert_manager
     if _cameras_started:
         return
     _cameras_started = True
@@ -63,6 +73,9 @@ def start_cameras():
     # Initialise databases
     _detections_db = DetectionsDB(os.path.join("data", "detections.db"))
     _notifications_db = NotificationsDB(os.path.join("data", "notifications.db"))
+    _alerts_db = AlertsDB(os.path.join("data", "alerts.db"))
+    _alerts_db.clear_all()
+    print("[alerts] Cleared alerts table on startup")
 
     # Start MQTT client
     _mqtt_client = MQTTNotificationClient(
@@ -72,6 +85,11 @@ def start_cameras():
         source_ip=SOURCE_IP,
     )
     _mqtt_client.start()
+
+    # Zone checking and alert management
+    _zone_checker = ZoneChecker()
+    _alert_manager = AlertManager(_alerts_db, mqtt_client=_mqtt_client)
+
     try:
         _test_detector = Detector(YOLO_MODEL)
         del _test_detector
@@ -86,7 +104,9 @@ def start_cameras():
         cam = CameraStream(camera_id=cam_id, url=cfg["url"], video_dir="videos",
                            buffer_seconds=45, detector=detector,
                            detections_db=_detections_db,
-                           mqtt_client=_mqtt_client)
+                           mqtt_client=_mqtt_client,
+                           zone_checker=_zone_checker,
+                           alert_manager=_alert_manager)
         try:
             cam.start()
             cameras[cam_id] = cam
@@ -214,6 +234,72 @@ def resolve_notification(notif_id):
 
 
 # ---------------------------------------------------------------------------
+# Alerts — zone-based alerts with lifecycle management
+# ---------------------------------------------------------------------------
+
+@app.route("/api/alerts/live")
+def alerts_live():
+    if not _alerts_db:
+        return jsonify([])
+    return jsonify(_alerts_db.query_live())
+
+
+@app.route("/api/alerts/history")
+def alerts_history():
+    if not _alerts_db:
+        return jsonify([])
+    return jsonify(_alerts_db.query_history(
+        limit=request.args.get("limit", 100, type=int),
+        camera_id=request.args.get("camera_id"),
+        zone_id=request.args.get("zone_id"),
+        object_type=request.args.get("object_type"),
+        severity=request.args.get("severity"),
+        from_ts=request.args.get("from"),
+        to_ts=request.args.get("to"),
+    ))
+
+
+@app.route("/api/alerts/<int:alert_id>")
+def get_alert(alert_id):
+    if not _alerts_db:
+        return jsonify({"error": "Alerts not initialised"}), 503
+    alert = _alerts_db.get_by_id(alert_id)
+    if not alert:
+        return jsonify({"error": "Alert not found"}), 404
+    alert["logs"] = _alerts_db.get_logs(alert_id)
+    return jsonify(alert)
+
+
+@app.route("/api/alerts/<int:alert_id>/acknowledge", methods=["PATCH"])
+def acknowledge_alert(alert_id):
+    if not _alert_manager:
+        return jsonify({"error": "Alert manager not initialised"}), 503
+    data = request.get_json(force=True)
+    username = data.get("acknowledged_by", "anonymous")
+    result = _alert_manager.acknowledge(alert_id, username)
+    if not result:
+        return jsonify({"error": "Alert not found or already acknowledged/closed"}), 404
+    return jsonify(result)
+
+
+@app.route("/api/alerts/<int:alert_id>/logs")
+def get_alert_logs(alert_id):
+    if not _alerts_db:
+        return jsonify([])
+    return jsonify(_alerts_db.get_logs(alert_id))
+
+
+@app.route("/api/zones")
+def get_zones():
+    if not _zone_checker:
+        return jsonify({})
+    camera_id = request.args.get("camera_id")
+    if camera_id:
+        return jsonify(_zone_checker.get_zones(camera_id))
+    return jsonify(_zone_checker.get_zones())
+
+
+# ---------------------------------------------------------------------------
 # Airport info — placeholder environmental & runway data
 # TODO: integrate real weather API and runway management system
 # ---------------------------------------------------------------------------
@@ -238,10 +324,57 @@ def airport_info():
 
 
 # ---------------------------------------------------------------------------
+# Zone overlay drawing helper
+# ---------------------------------------------------------------------------
+
+_ZONE_COLORS = {
+    "severe": (0, 0, 255),    # red in BGR
+    "medium": (0, 165, 255),  # orange
+    "low":    (255, 180, 0),  # cyan-ish blue
+    None:     (0, 255, 0),    # green default
+}
+
+
+def _draw_zones_on_jpeg(jpeg_bytes, camera_id):
+    """Decode JPEG, draw zone polygons, re-encode. Returns new JPEG bytes."""
+    if not _zone_checker:
+        return jpeg_bytes
+    zones = _zone_checker.get_zones(camera_id)
+    if not zones:
+        return jpeg_bytes
+
+    arr = np.frombuffer(jpeg_bytes, dtype=np.uint8)
+    frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if frame is None:
+        return jpeg_bytes
+
+    overlay = frame.copy()
+    for zone in zones:
+        pts = np.array(zone["polygon"], dtype=np.int32)
+        color = _ZONE_COLORS.get(zone.get("severity_override"), _ZONE_COLORS[None])
+        cv2.fillPoly(overlay, [pts], color)
+        cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=2)
+        M = cv2.moments(pts)
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            cy = int(M["m01"] / M["m00"])
+            cv2.putText(frame, zone.get("name", zone["id"]),
+                        (cx - 40, cy), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5, (255, 255, 255), 1, cv2.LINE_AA)
+
+    alpha = 0.2
+    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+    _, out = cv2.imencode(".jpg", frame)
+    return out.tobytes()
+
+
+# ---------------------------------------------------------------------------
 # API 1 — Live stream (MJPEG, ring buffer, offset 0-30s)
 # GET /api/stream/<camera_id>/live?offset=<seconds>
 #   offset=0 (default) → real-time live
 #   offset=5           → always 5s behind live, persistently
+#   zones=1            → draw zone boundary polygons on each frame
 # ---------------------------------------------------------------------------
 
 @app.route("/api/stream/<camera_id>/live")
@@ -251,29 +384,31 @@ def live_stream(camera_id):
         return jsonify({"error": "Camera not found"}), 404
 
     annotated = request.args.get("annotated", "0") == "1"
+    show_zones = request.args.get("zones", "0") == "1"
     offset = min(request.args.get("offset", 0, type=float), 30)
 
     def generate():
         if offset <= 0:
-            # Real-time: serve frames as they arrive
             while True:
                 if annotated and cam.has_detector:
                     jpeg = cam.wait_for_annotated_frame(timeout=1.0)
                 else:
                     jpeg = cam.wait_for_frame(timeout=1.0)
                 if jpeg:
+                    if show_zones:
+                        jpeg = _draw_zones_on_jpeg(jpeg, camera_id)
                     yield (b"--frame\r\n"
                            b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
         else:
-            # Delayed: continuously serve the frame from `offset` seconds ago
             last_jpeg = None
             while True:
                 target = datetime.now(timezone.utc) - timedelta(seconds=offset)
                 jpeg = cam.get_frame_at(target)
                 if jpeg and jpeg is not last_jpeg:
                     last_jpeg = jpeg
+                    out = _draw_zones_on_jpeg(jpeg, camera_id) if show_zones else jpeg
                     yield (b"--frame\r\n"
-                           b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
+                           b"Content-Type: image/jpeg\r\n\r\n" + out + b"\r\n")
                 time.sleep(1 / cam.fps)
 
     return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")

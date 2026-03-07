@@ -52,11 +52,14 @@ class CameraStream:
 
     def __init__(self, camera_id, url, video_dir="videos",
                  buffer_seconds=30, segment_seconds=30,
-                 detector=None, detections_db=None, mqtt_client=None):
+                 detector=None, detections_db=None, mqtt_client=None,
+                 zone_checker=None, alert_manager=None):
         self.camera_id = camera_id
         self.url = url
         self._mqtt_client = mqtt_client
-        self._notified_tracks = set()  # track_ids we already notified about
+        self._zone_checker = zone_checker
+        self._alert_manager = alert_manager
+        self._notified_tracks = set()
         self.fps = None  # measured on start
         self.buffer_seconds = buffer_seconds
         self.segment_seconds = segment_seconds
@@ -283,7 +286,7 @@ class CameraStream:
                 except Exception as e:
                     print(f"[detector] {self.camera_id} DB error: {e}")
 
-            # Publish notifications for new hazard tracks
+            # Publish notifications for new hazard tracks (legacy)
             if detections and self._mqtt_client:
                 for d in detections:
                     tid = d["track_id"]
@@ -299,6 +302,16 @@ class CameraStream:
                             )
                         except Exception as e:
                             print(f"[detector] {self.camera_id} notification error: {e}")
+
+            # Zone-based alerts
+            if detections and self._zone_checker and self._alert_manager:
+                try:
+                    violations = self._zone_checker.check_detections(
+                        self.camera_id, detections
+                    )
+                    self._alert_manager.process_frame(self.camera_id, violations)
+                except Exception as e:
+                    print(f"[detector] {self.camera_id} zone alert error: {e}")
 
     # ------------------------------------------------------------------
     # Live stream access
