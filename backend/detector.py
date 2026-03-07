@@ -8,6 +8,10 @@ from ultralytics import YOLO
 class Detector:
     """YOLO segmentation + ByteTrack tracking wrapper."""
 
+    # COCO class IDs to detect
+    CLASSES = [0, 2, 4, 7, 14, 16, 63, 67]
+    #          person car airplane truck bird dog laptop cell_phone
+
     def __init__(self, model_path, confidence=0.25):
         self.model = YOLO(model_path)
         self.confidence = confidence
@@ -23,6 +27,7 @@ class Detector:
         results = self.model.track(
             frame, persist=True, verbose=False,
             conf=self.confidence, tracker="bytetrack.yaml",
+            classes=self.CLASSES,
         )
         annotated = results[0].plot()
 
@@ -58,12 +63,17 @@ class Detector:
                                     (0, 0, 255), 2, tipLength=0.4)
 
                 class_name = self.model.names.get(cls_id, str(cls_id))
+                predicted_tip = None
+                if len(points) >= 5:
+                    predicted_tip = [tip[0], tip[1]]
+
                 detections.append({
                     "track_id": track_id,
                     "class_name": class_name,
                     "confidence": round(conf, 3),
                     "bbox": [round(x1, 1), round(y1, 1),
                              round(x2, 1), round(y2, 1)],
+                    "predicted_tip": predicted_tip,
                 })
 
         return annotated, detections

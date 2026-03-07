@@ -3,17 +3,17 @@ set -e
 
 cd "$(dirname "$0")"
 
-export CAMERA_2_URL="${CAMERA_2_URL:-http://0.0.0.0:8554/video}"
-export YOLO_MODEL_PATH="yolo26n.pt"
+export CAMERA_1_URL="${CAMERA_1_URL:-http://localhost:8554/video}"
+export CAMERA_2_URL="${CAMERA_2_URL:-http://localhost:8555/video}"
+export YOLO_MODEL_PATH="yolo26s.pt"
 
 PORT="${PORT:-8081}"
 WORKERS="${WORKERS:-1}"
 
-THREADS="${THREADS:-16}"
+THREADS="${THREADS:-100}"
 
-echo "Starting Runway Shield backend on port $PORT ($WORKERS worker, $THREADS threads)..."
+echo "Starting Runway Shield backend on port $PORT ($WORKERS worker, $THREADS threads, WebSocket enabled)..."
 exec gunicorn \
-  -k gthread \
   -w "$WORKERS" \
   --threads "$THREADS" \
   --bind "0.0.0.0:$PORT" \

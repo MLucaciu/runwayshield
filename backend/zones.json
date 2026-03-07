@@ -1,23 +1,25 @@
 {
   "camera_1": {
     "gps_corners": {
-      "top_left":     {"px": [0, 0],       "gps": [47.0370, 21.9470]},
-      "top_right":    {"px": [1920, 0],     "gps": [47.0370, 21.9500]},
-      "bottom_left":  {"px": [0, 1080],     "gps": [47.0360, 21.9470]},
-      "bottom_right": {"px": [1920, 1080],  "gps": [47.0360, 21.9500]}
+      "top_left":     {"px": [0, 463],       "gps": [47.028247, 21.901027]},
+      "top_right":    {"px": [1920, 456],     "gps": [47.026763, 21.900620]},
+      "bottom_left":  {"px": [0, 1080],     "gps": [47.028287, 21.899518]},
+      "bottom_right": {"px": [1920, 1080],  "gps": [47.028134, 21.899483]}
     },
     "zones": [
       {
-        "id": "runway_main",
-        "name": "Runway 09/27",
-        "polygon": [[100, 200], [800, 200], [800, 600], [100, 600]],
+        "id": "parking_area_right",
+        "name": "Parking Area Right",
+        "polygon": [[1033, 492], [1920, 466], [1920, 1080],[1415, 1080]],
         "severity_override": null
       },
       {
-        "id": "taxiway_alpha",
-        "name": "Taxiway Alpha",
-        "polygon": [[850, 300], [1200, 300], [1200, 550], [850, 550]],
-        "severity_override": "high"
+        "id": "bird_area_right",
+        "name": "Bird detection area right",
+        "polygon": [[100, 100], [1820, 100], [1820, 980], [100, 980]],
+        "severity_override": "medium",
+        "action": "buzzer",
+        "tags": ["bird"]
       }
     ]
   },
@@ -30,10 +32,18 @@
     },
     "zones": [
       {
-        "id": "critical_area",
-        "name": "Critical Area",
+        "id": "parking_area_left",
+        "name": "Parking Area Left",
         "polygon": [[0, 586], [900, 530], [1001, 801], [0, 950]],
         "severity_override": "high"
+      },
+      {
+        "id": "bird_area_left",
+        "name": "Bird detection area left",
+        "polygon": [[100, 100], [1820, 100], [1820, 980], [100, 980]],
+        "severity_override": "medium",
+        "action": "buzzer",
+        "tags": ["bird"]
       }
     ]
   }

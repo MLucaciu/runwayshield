@@ -97,6 +97,10 @@ class CameraStream:
         self._annotated_cond = threading.Condition()
         self._annotated_seq = 0
 
+        # Annotated ring buffer for seek/offset playback
+        self._annotated_ring = deque(maxlen=1)  # resized after fps measured
+        self._annotated_ring_lock = threading.Lock()
+
         # Annotated frame (numpy) for segment writer
         self._latest_annotated_frame = None
         self._annotated_frame_lock = threading.Lock()
@@ -139,6 +143,8 @@ class CameraStream:
         # Measure real fps and size the ring buffer accordingly
         self.fps = _measure_fps(self._cap)
         self.ring_buffer = deque(maxlen=self.buffer_seconds * self.fps)
+        if self._detector:
+            self._annotated_ring = deque(maxlen=self.buffer_seconds * self.fps)
         print(f"[camera] {self.camera_id} measured fps: {self.fps}")
 
         self._running = True
@@ -277,6 +283,10 @@ class CameraStream:
                 self._annotated_seq += 1
                 self._annotated_cond.notify_all()
 
+            # Push to annotated ring buffer for seek/offset
+            with self._annotated_ring_lock:
+                self._annotated_ring.append((datetime.now(timezone.utc), jpeg_bytes))
+
             # Persist detections to DB
             if detections and self._detections_db:
                 try:
@@ -303,13 +313,18 @@ class CameraStream:
                         except Exception as e:
                             print(f"[detector] {self.camera_id} notification error: {e}")
 
-            # Zone-based alerts
+            # Zone-based alerts and proximity warnings
             if detections and self._zone_checker and self._alert_manager:
                 try:
                     violations = self._zone_checker.check_detections(
                         self.camera_id, detections
                     )
-                    self._alert_manager.process_frame(self.camera_id, violations)
+                    warnings = self._zone_checker.check_proximity_warnings(
+                        self.camera_id, detections, violations
+                    )
+                    self._alert_manager.process_frame(
+                        self.camera_id, violations, warnings=warnings
+                    )
                 except Exception as e:
                     print(f"[detector] {self.camera_id} zone alert error: {e}")
 
@@ -352,6 +367,20 @@ class CameraStream:
                     best_diff = diff
                 elif diff > best_diff:
                     break  # buffer is sorted, we've passed the closest
+            return best
+
+    def get_annotated_frame_at(self, target_ts):
+        """Return the annotated jpeg_bytes closest to target_ts, or None."""
+        with self._annotated_ring_lock:
+            best = None
+            best_diff = None
+            for ts, jpeg in self._annotated_ring:
+                diff = abs((ts - target_ts).total_seconds())
+                if best_diff is None or diff < best_diff:
+                    best = jpeg
+                    best_diff = diff
+                elif diff > best_diff:
+                    break
             return best
 
     def get_buffer_frames(self, from_ts, to_ts):

@@ -52,6 +52,7 @@ class AlertsDB:
                 zone_name TEXT,
                 object_type TEXT NOT NULL,
                 severity TEXT NOT NULL DEFAULT 'medium',
+                alert_type TEXT NOT NULL DEFAULT 'alert',
                 status TEXT NOT NULL DEFAULT 'active',
                 gps_lat REAL,
                 gps_lng REAL,
@@ -62,6 +63,7 @@ class AlertsDB:
                 closed_at TEXT
             )
         """)
+        self._ensure_alert_type_column(conn)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_alert_status "
             "ON alerts (status)"
@@ -85,6 +87,13 @@ class AlertsDB:
         )
         conn.commit()
 
+    def _ensure_alert_type_column(self, conn):
+        """Add alert_type column to existing databases created before this feature."""
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(alerts)").fetchall()]
+        if "alert_type" not in cols:
+            conn.execute("ALTER TABLE alerts ADD COLUMN alert_type TEXT NOT NULL DEFAULT 'alert'")
+            conn.commit()
+
     def _now_iso(self):
         return datetime.now(timezone.utc).isoformat()
 
@@ -100,7 +109,7 @@ class AlertsDB:
     # ------------------------------------------------------------------
 
     def upsert(self, camera_id, zone_id, object_type, severity, gps_lat, gps_lng,
-               zone_name=None):
+               zone_name=None, alert_type="alert"):
         """Create or update an alert. Returns (alert_dict, is_new)."""
         conn = self._conn()
         now = self._now_iso()
@@ -124,19 +133,50 @@ class AlertsDB:
 
         cur = conn.execute(
             "INSERT INTO alerts "
-            "(camera_id, zone_id, zone_name, object_type, severity, status, "
+            "(camera_id, zone_id, zone_name, object_type, severity, alert_type, status, "
             "gps_lat, gps_lng, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
-            (camera_id, zone_id, zone_name, object_type, severity,
+            "VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)",
+            (camera_id, zone_id, zone_name, object_type, severity, alert_type,
              gps_lat, gps_lng, now, now),
         )
         alert_id = cur.lastrowid
         self._log(conn, alert_id, "created", {
             "severity": severity,
+            "alert_type": alert_type,
             "gps": [gps_lat, gps_lng],
         })
         conn.commit()
         return self._get(conn, alert_id), True
+
+    def escalate_warning(self, alert_id, severity):
+        """Promote a warning to a full alert. Returns the updated alert or None."""
+        conn = self._conn()
+        now = self._now_iso()
+        changed = conn.execute(
+            "UPDATE alerts SET alert_type = 'alert', severity = ?, updated_at = ? "
+            "WHERE id = ? AND alert_type = 'warning' AND status IN ('active', 'acknowledged')",
+            (severity, now, alert_id),
+        ).rowcount
+        if changed:
+            self._log(conn, alert_id, "escalated", {"from": "warning", "to": "alert", "severity": severity})
+            conn.commit()
+            return self._get(conn, alert_id)
+        conn.commit()
+        return None
+
+    def find_open_warnings(self, camera_id):
+        """All active warnings for a camera."""
+        conn = self._conn()
+        return [
+            dict(row)
+            for row in conn.execute(
+                "SELECT * FROM alerts "
+                "WHERE camera_id = ? AND alert_type = 'warning' "
+                "AND status IN ('active', 'acknowledged') "
+                "ORDER BY created_at DESC",
+                (camera_id,),
+            ).fetchall()
+        ]
 
     def close_alert(self, alert_id):
         """Close an alert (object left the zone).

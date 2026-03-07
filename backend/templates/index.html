@@ -972,6 +972,36 @@ a.sidebar-nav-item {
 .status-resolved { color: var(--sev-green); }
 .status-closed { color: var(--text-dim); }
 
+.bottom-alert-item.is-warning {
+  border-left-style: dashed;
+  border-left-width: 3px;
+  background: rgba(240,160,48,0.05);
+}
+
+.bottom-alert-item.is-warning .bottom-alert-msg::before {
+  content: "⚠ ";
+}
+
+.warning-badge {
+  display: inline-block;
+  font-size: 0.48rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.32rem;
+  border-radius: 3px;
+  background: rgba(240,160,48,0.18);
+  color: var(--sev-amber);
+  border: 1px solid rgba(240,160,48,0.3);
+  margin-left: 0.4em;
+  vertical-align: middle;
+}
+
+.ticker-item.is-warning {
+  border-style: dashed;
+}
+
 .bottom-alert-actions {
   display: flex;
   align-items: center;
@@ -1306,7 +1336,7 @@ a.sidebar-nav-item {
 
           <div class="bottom-alerts-panel panel">
             <div class="panel-header">
-              <span class="panel-title">Zone Alerts</span>
+              <span class="panel-title" id="zoneAlertTitle">Zone Alerts</span>
               <span class="panel-count" id="zoneAlertCount">0</span>
               <button class="ack-first-btn" id="ackFirstBtn" style="display:none;">Acknowledge Alert</button>
             </div>
@@ -1320,6 +1350,7 @@ a.sidebar-nav-item {
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
 (function() {
   "use strict";
@@ -1375,6 +1406,7 @@ a.sidebar-nav-item {
   const camThumbs = $("camThumbs");
   const segmentsList = $("segmentsList");
   const mapCoords = $("mapCoords");
+  const zoneAlertTitle = $("zoneAlertTitle");
   const zoneAlertCount = $("zoneAlertCount");
   const ackFirstBtn = $("ackFirstBtn");
   const zoneAlertsList = $("zoneAlertsList");
@@ -1384,6 +1416,7 @@ a.sidebar-nav-item {
     high:   { label: "HIGH",   color: "#f04858", bg: "rgba(240,72,88,.10)" },
     medium: { label: "MEDIUM", color: "#f0a030", bg: "rgba(240,160,48,.10)" },
     low:    { label: "LOW",    color: "#38bdd2", bg: "rgba(56,189,210,.10)" },
+    warning:{ label: "WARNING",color: "#f0a030", bg: "rgba(240,160,48,.07)" },
   };
 
   // ── Helpers ─────────────────────────────────────────────────────
@@ -1472,7 +1505,49 @@ a.sidebar-nav-item {
   }
 
   fetchData();
-  setInterval(fetchData, 8081);
+  setInterval(fetchData, 30000);
+
+  // ── WebSocket (real-time alerts) ────────────────────────────────
+  const socket = io({ transports: ["websocket", "polling"] });
+
+  socket.on("connect", () => {
+    console.log("[ws] connected");
+  });
+
+  socket.on("disconnect", () => {
+    console.log("[ws] disconnected");
+  });
+
+  socket.on("alerts_snapshot", (data) => {
+    zoneAlerts = data;
+    updateAlertTicker();
+    updateZoneAlerts();
+    updateMap();
+  });
+
+  socket.on("alert_event", (data) => {
+    const evt = data.event;
+    const alert = data.alert;
+
+    if (evt === "alert_new" || evt === "warning_new") {
+      const idx = zoneAlerts.findIndex(a => a.id === alert.id);
+      if (idx >= 0) zoneAlerts[idx] = alert;
+      else zoneAlerts.unshift(alert);
+    } else if (evt === "warning_escalated") {
+      const idx = zoneAlerts.findIndex(a => a.id === alert.id);
+      if (idx >= 0) zoneAlerts[idx] = alert;
+      else zoneAlerts.unshift(alert);
+    } else if (evt === "alert_acknowledged") {
+      const idx = zoneAlerts.findIndex(a => a.id === alert.id);
+      if (idx >= 0) zoneAlerts[idx] = alert;
+    } else if (evt === "alert_closed" || evt === "alert_resolved" || evt === "warning_closed") {
+      zoneAlerts = zoneAlerts.filter(a => a.id !== alert.id);
+    }
+
+    updateAlertTicker();
+    updateZoneAlerts();
+    updateMap();
+  });
 
   // ── UI update orchestrator ──────────────────────────────────────
   function updateUI() {
@@ -1520,6 +1595,8 @@ a.sidebar-nav-item {
 
   // ── Camera thumbs ──────────────────────────────────────────────
   function updateCamThumbs() {
+    // Cancel existing MJPEG streams before removing elements to free browser connections
+    camThumbs.querySelectorAll("img").forEach(img => { img.src = ""; });
     camThumbs.innerHTML = "";
     cameras.forEach(cam => {
       const btn = document.createElement("button");
@@ -1604,10 +1681,13 @@ a.sidebar-nav-item {
         streamVid.style.display = "none";
         streamVid.pause();
         streamVid.removeAttribute("src");
+        // Abort old MJPEG connection before starting new one to avoid connection exhaustion
+        streamImg.removeAttribute("src");
         streamImg.style.display = "block";
         streamImg.src = streamSrc;
       }
     } else {
+      streamImg.removeAttribute("src");
       streamImg.style.display = "none";
       streamVid.style.display = "none";
       streamOffline.style.display = "";
@@ -1814,15 +1894,18 @@ a.sidebar-nav-item {
 
     if (zoneAlerts.length > 0) {
       zoneAlerts.forEach(a => {
-        const sev = SEV[a.severity] || SEV.low;
+        const isWarning = a.alert_type === "warning";
+        const sev = isWarning ? SEV.warning : (SEV[a.severity] || SEV.low);
         const span = document.createElement("span");
-        span.className = "ticker-item";
+        span.className = "ticker-item" + (isWarning ? " is-warning" : "");
         span.style.borderColor = sev.color;
         span.style.background = sev.bg;
+        const label = isWarning ? "WARNING" : sev.label;
+        const prefix = isWarning ? "⚠ " : "";
         span.innerHTML =
           '<span class="ticker-dot" style="background:' + sev.color + '"></span>' +
-          '<span class="ticker-class">' + esc(a.object_type) + ' in ' + esc(a.zone_id) + '</span>' +
-          '<span class="ticker-sev" style="color:' + sev.color + '">' + sev.label + '</span>';
+          '<span class="ticker-class">' + prefix + esc(a.object_type) + ' → ' + esc(a.zone_id) + '</span>' +
+          '<span class="ticker-sev" style="color:' + sev.color + '">' + label + '</span>';
         alertTicker.appendChild(span);
       });
     } else if (alertsForCam.length > 0) {
@@ -1852,9 +1935,12 @@ a.sidebar-nav-item {
 
   // ── Zone alerts panel ──────────────────────────────────────────
   function updateZoneAlerts() {
-    zoneAlertCount.textContent = zoneAlerts.length;
+    const alertCount = zoneAlerts.filter(a => a.alert_type !== "warning").length;
+    const warningCount = zoneAlerts.filter(a => a.alert_type === "warning").length;
+    zoneAlertCount.textContent = alertCount + (warningCount ? " + " + warningCount + "w" : "");
+    zoneAlertTitle.textContent = warningCount ? "Zone Alerts & Warnings" : "Zone Alerts";
 
-    const hasActive = zoneAlerts.some(a => a.status === "active");
+    const hasActive = zoneAlerts.some(a => a.status === "active" && a.alert_type !== "warning");
     ackFirstBtn.style.display = hasActive ? "" : "none";
 
     if (!zoneAlerts.length) {
@@ -1864,25 +1950,41 @@ a.sidebar-nav-item {
 
     zoneAlertsList.innerHTML = "";
     zoneAlerts.forEach(a => {
-      const sev = SEV[a.severity] || SEV.low;
+      const isWarning = a.alert_type === "warning";
+      const sev = isWarning ? SEV.warning : (SEV[a.severity] || SEV.low);
       const item = document.createElement("div");
-      item.className = "bottom-alert-item";
+      item.className = "bottom-alert-item" + (isWarning ? " is-warning" : "");
       item.style.borderLeftColor = sev.color;
+      item.style.cursor = "pointer";
+      item.addEventListener("click", () => {
+        const cam = cameras.find(c => c.id === a.camera_id);
+        if (cam) handleCamSwitch(cam);
+      });
 
       const content = document.createElement("div");
       content.className = "bottom-alert-content";
 
       const msg = document.createElement("span");
       msg.className = "bottom-alert-msg";
-      msg.textContent = (a.object_type || "") + " in " + (a.zone_id || "");
+      const verb = isWarning ? " → " : " in ";
+      msg.textContent = (a.object_type || "") + verb + (a.zone_name || a.zone_id || "");
       content.appendChild(msg);
 
       const meta = document.createElement("span");
       meta.className = "bottom-alert-status";
-      const statusSpan = document.createElement("span");
-      statusSpan.className = "status-" + (a.status || "");
-      statusSpan.textContent = (a.status || "").toUpperCase();
-      meta.appendChild(statusSpan);
+
+      if (isWarning) {
+        const warnBadge = document.createElement("span");
+        warnBadge.className = "warning-badge";
+        warnBadge.textContent = "TRAJECTORY WARNING";
+        meta.appendChild(warnBadge);
+      } else {
+        const statusSpan = document.createElement("span");
+        statusSpan.className = "status-" + (a.status || "");
+        statusSpan.textContent = (a.status || "").toUpperCase();
+        meta.appendChild(statusSpan);
+      }
+
       if (a.created_at) {
         const ts = document.createElement("span");
         ts.style.cssText = "color:var(--text-muted);margin-left:0.5em;font-weight:500;";
@@ -1901,13 +2003,13 @@ a.sidebar-nav-item {
       time.textContent = fmtAlertTime(a.created_at);
       actions.appendChild(time);
 
-      if (a.status === "active") {
+      if (!isWarning && a.status === "active") {
         const ackBtn = document.createElement("button");
         ackBtn.className = "ack-btn-react";
         ackBtn.textContent = "ACK";
-        ackBtn.addEventListener("click", () => acknowledgeAlert(a.id));
+        ackBtn.addEventListener("click", (e) => { e.stopPropagation(); acknowledgeAlert(a.id); });
         actions.appendChild(ackBtn);
-      } else if (a.status === "acknowledged") {
+      } else if (!isWarning && a.status === "acknowledged") {
         const lbl = document.createElement("span");
         lbl.className = "ack-label";
         lbl.textContent = a.acknowledged_by || "";
@@ -1931,7 +2033,7 @@ a.sidebar-nav-item {
   }
 
   ackFirstBtn.addEventListener("click", () => {
-    const first = zoneAlerts.find(a => a.status === "active");
+    const first = zoneAlerts.find(a => a.status === "active" && a.alert_type !== "warning");
     if (first) acknowledgeAlert(first.id);
   });
 
@@ -1941,7 +2043,7 @@ a.sidebar-nav-item {
   let mapAlertMarkers = [];
   let mapInitialFit = false;
 
-  const ALERT_PIN_COLORS = { high: "#f04858", medium: "#f0a030", low: "#38bdd2" };
+  const ALERT_PIN_COLORS = { high: "#f04858", medium: "#f0a030", low: "#38bdd2", warning: "#f0a030" };
 
   function makeAlertPinSvg(color) {
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 42" width="28" height="36">' +
@@ -1998,7 +2100,8 @@ a.sidebar-nav-item {
 
   function addAlertMarkers(alerts) {
     alerts.forEach(a => {
-      const color = ALERT_PIN_COLORS[a.severity] || ALERT_PIN_COLORS.medium;
+      const isWarning = a.alert_type === "warning";
+      const color = isWarning ? ALERT_PIN_COLORS.warning : (ALERT_PIN_COLORS[a.severity] || ALERT_PIN_COLORS.medium);
       const icon = L.divIcon({
         html: makeAlertPinSvg(color),
         className: "alert-map-pin",
@@ -2009,16 +2112,18 @@ a.sidebar-nav-item {
 
       const marker = L.marker([a.gps_lat, a.gps_lng], {
         icon: icon,
-        zIndexOffset: 1000,
+        zIndexOffset: isWarning ? 500 : 1000,
       }).addTo(leafletMap);
 
-      const sevLabel = (a.severity || "").toUpperCase();
+      const sevLabel = isWarning ? "WARNING" : (a.severity || "").toUpperCase();
       const zoneName = a.zone_name || a.zone_id || "";
       const camName = a.camera_name || a.camera_id || "";
+      const titlePrefix = isWarning ? "Warning" : "Alert";
 
       marker.bindPopup(
         '<div style="min-width:150px;font-family:\'DM Sans\',sans-serif;">' +
-          '<div style="font-weight:700;font-size:12px;margin-bottom:4px;">Alert #' + a.id + '</div>' +
+          '<div style="font-weight:700;font-size:12px;margin-bottom:4px;">' + titlePrefix + ' #' + a.id + '</div>' +
+          (isWarning ? '<div style="font-size:10px;margin-bottom:4px;padding:2px 6px;background:rgba(240,160,48,0.15);border-radius:3px;color:#f0a030;font-weight:700;">TRAJECTORY WARNING</div>' : '') +
           '<div style="font-size:11px;margin-bottom:2px;"><strong>Object:</strong> ' + esc(a.object_type) + '</div>' +
           '<div style="font-size:11px;margin-bottom:2px;"><strong>Zone:</strong> ' + esc(zoneName) + '</div>' +
           '<div style="font-size:11px;margin-bottom:2px;"><strong>Camera:</strong> ' + esc(camName) + '</div>' +

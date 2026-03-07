@@ -8,6 +8,7 @@ import numpy as np
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 
 from camera import CameraStream
 from detector import Detector
@@ -21,6 +22,7 @@ from esp_sensor_client import ESPSensorClient
 
 app = Flask(__name__)
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # ---------------------------------------------------------------------------
 # Camera registry
@@ -65,6 +67,23 @@ def _shutdown():
 atexit.register(_shutdown)
 
 
+def _ws_alert_emit(event_type, alert_data):
+    """Broadcast alert events to all connected WebSocket clients."""
+    try:
+        cfg = CAMERA_CONFIG.get(alert_data.get("camera_id"), {})
+        alert_data["camera_name"] = cfg.get("name", alert_data.get("camera_id", ""))
+        socketio.emit("alert_event", {"event": event_type, "alert": alert_data})
+    except Exception as e:
+        print(f"[ws] emit error: {e}")
+
+
+@socketio.on("connect")
+def _ws_on_connect():
+    if _alerts_db:
+        alerts = _enrich_alerts(_alerts_db.query_live())
+        emit("alerts_snapshot", alerts)
+
+
 def start_cameras():
     global _cameras_started, _detections_db, _notifications_db, _mqtt_client
     global _alerts_db, _zone_checker, _alert_manager, _esp_sensor
@@ -97,7 +116,10 @@ def start_cameras():
 
     # Zone checking and alert management
     _zone_checker = ZoneChecker()
-    _alert_manager = AlertManager(_alerts_db, mqtt_client=_mqtt_client, esp_sensor=_esp_sensor)
+    _alert_manager = AlertManager(
+        _alerts_db, mqtt_client=_mqtt_client, esp_sensor=_esp_sensor,
+        ws_emit=_ws_alert_emit,
+    )
 
     try:
         _test_detector = Detector(YOLO_MODEL)
@@ -490,7 +512,10 @@ def live_stream(camera_id):
             last_jpeg = None
             while True:
                 target = datetime.now(timezone.utc) - timedelta(seconds=offset)
-                jpeg = cam.get_frame_at(target)
+                if annotated and cam.has_detector:
+                    jpeg = cam.get_annotated_frame_at(target)
+                else:
+                    jpeg = cam.get_frame_at(target)
                 if jpeg and jpeg is not last_jpeg:
                     last_jpeg = jpeg
                     out = _draw_zones_on_jpeg(jpeg, camera_id) if show_zones else jpeg
@@ -557,4 +582,4 @@ def get_detections(camera_id):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8081))
-    app.run(host="0.0.0.0", port=port, debug=True, threaded=True)
+    socketio.run(app, host="0.0.0.0", port=port, debug=True, allow_unsafe_werkzeug=True)
