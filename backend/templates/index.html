@@ -65,6 +65,21 @@
     }
     .controls label { font-size: 12px; color: #94a3b8; }
 
+    .toggle-switch {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .toggle-switch label { font-size: 12px; color: #94a3b8; cursor: pointer; user-select: none; }
+    .toggle-track {
+      width: 38px; height: 20px; border-radius: 10px; background: #475569;
+      position: relative; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle-track.on { background: #3b82f6; }
+    .toggle-track .toggle-knob {
+      width: 16px; height: 16px; border-radius: 50%; background: #e2e8f0;
+      position: absolute; top: 2px; left: 2px; transition: left 0.2s;
+    }
+    .toggle-track.on .toggle-knob { left: 20px; }
+
     .segments {
       background: #1e293b; border: 1px solid #334155; border-radius: 8px;
       padding: 16px; margin-top: 16px;
@@ -114,6 +129,13 @@
       <button id="btnBack30">-30s</button>
       <button id="btnBack120">-120s</button>
       <div class="spacer"></div>
+      <div class="toggle-switch" id="annotationToggle">
+        <label>Annotations</label>
+        <div class="toggle-track" id="toggleTrack">
+          <div class="toggle-knob"></div>
+        </div>
+      </div>
+      <div class="spacer"></div>
       <label>Custom:</label>
       <input type="number" id="customOffset" class="offset-input" min="0" max="9999" value="0" placeholder="sec">
       <button id="btnCustom">Go</button>
@@ -135,11 +157,25 @@
     const segmentList = document.getElementById("segmentList");
     const btnLive = document.getElementById("btnLive");
 
+    const toggleTrack = document.getElementById("toggleTrack");
+
     let currentCamera = null;
     let mode = "live";             // "live" | "history"
+    let annotated = false;
     let segments = [];
     let activeSegmentIndex = -1;
     let progressTimer = null;
+
+    toggleTrack.addEventListener("click", () => {
+      annotated = !annotated;
+      toggleTrack.classList.toggle("on", annotated);
+      // Re-apply current view with new annotation setting
+      if (mode === "live") {
+        seekTo(parseInt(document.getElementById("customOffset").value) || 0);
+      } else if (activeSegmentIndex >= 0) {
+        playSegmentByIndex(activeSegmentIndex);
+      }
+    });
 
     // ---- Show img (MJPEG) or video (MP4) ----
     function showImg() {
@@ -209,9 +245,11 @@
         mode = "live";
         activeSegmentIndex = -1;
         showImg();
-        const url = seconds > 0
-          ? `/api/stream/${currentCamera}/live?offset=${seconds}`
-          : `/api/stream/${currentCamera}/live`;
+        const params = new URLSearchParams();
+        if (seconds > 0) params.set("offset", seconds);
+        if (annotated) params.set("annotated", "1");
+        const qs = params.toString();
+        const url = `/api/stream/${currentCamera}/live` + (qs ? `?${qs}` : "");
         imgFeed.src = url;
 
         if (seconds === 0) {
@@ -231,7 +269,9 @@
         activeSegmentIndex = -1;
         const t = (Date.now() / 1000) - seconds;
         showVid();
-        vidFeed.src = `/api/stream/${currentCamera}/history?t=${t}`;
+        const histParams = new URLSearchParams({ t });
+        if (annotated) histParams.set("annotated", "1");
+        vidFeed.src = `/api/stream/${currentCamera}/history?${histParams}`;
         vidFeed.load();
         vidFeed.play();
 
@@ -280,7 +320,9 @@
       const t = segDate.getTime() / 1000;
 
       showVid();
-      vidFeed.src = `/api/stream/${currentCamera}/history?t=${t}`;
+      const segParams = new URLSearchParams({ t });
+      if (annotated) segParams.set("annotated", "1");
+      vidFeed.src = `/api/stream/${currentCamera}/history?${segParams}`;
       vidFeed.load();
       vidFeed.play();
 

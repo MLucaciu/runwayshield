@@ -7,6 +7,8 @@ from flask import Flask, Response, jsonify, render_template, request, send_file
 from flask_cors import CORS
 
 from camera import CameraStream
+from detector import Detector
+from detections_db import DetectionsDB
 
 app = Flask(__name__)
 CORS(app)
@@ -30,6 +32,9 @@ CAMERA_CONFIG = {
 cameras: dict[str, CameraStream] = {}
 _cameras_started = False
 
+YOLO_MODEL = os.environ.get("YOLO_MODEL_PATH", "yolo11n-seg.pt")
+_detections_db = None
+
 
 def _shutdown_cameras():
     for cam_id, cam in cameras.items():
@@ -40,13 +45,27 @@ atexit.register(_shutdown_cameras)
 
 
 def start_cameras():
-    global _cameras_started
+    global _cameras_started, _detections_db
     if _cameras_started:
         return
     _cameras_started = True
+
+    # Initialise YOLO detector (ultralytics auto-downloads standard models)
+    _detections_db = DetectionsDB(os.path.join("data", "detections.db"))
+    try:
+        _test_detector = Detector(YOLO_MODEL)
+        del _test_detector
+        print(f"[yolo] Model ready: {YOLO_MODEL}")
+        yolo_ok = True
+    except Exception as e:
+        print(f"[yolo] Could not load model ({YOLO_MODEL}): {e}")
+        yolo_ok = False
+
     for cam_id, cfg in CAMERA_CONFIG.items():
+        detector = Detector(YOLO_MODEL) if yolo_ok else None
         cam = CameraStream(camera_id=cam_id, url=cfg["url"], video_dir="videos",
-                           buffer_seconds=45)
+                           buffer_seconds=45, detector=detector,
+                           detections_db=_detections_db)
         try:
             cam.start()
             cameras[cam_id] = cam
@@ -72,11 +91,14 @@ def _camera_json(cam_id):
         "id": cam_id,
         "name": cfg.get("name", cam_id),
         "stream_url": f"/api/stream/{cam_id}/live",
+        "annotated_stream_url": f"/api/stream/{cam_id}/live?annotated=1",
         "online": online,
         "connected": cam.connected if cam else False,
+        "detection_enabled": cam.has_detector if cam else False,
         "location": cfg.get("location"),
         "buffer_start": cam.buffer_start_time().isoformat() if cam and cam.buffer_start_time() else None,
         "segments": cam.list_segments() if cam else [],
+        "annotated_segments": cam.list_segments(annotated=True) if cam else [],
     }
 
 
@@ -174,13 +196,17 @@ def live_stream(camera_id):
     if not cam:
         return jsonify({"error": "Camera not found"}), 404
 
+    annotated = request.args.get("annotated", "0") == "1"
     offset = min(request.args.get("offset", 0, type=float), 30)
 
     def generate():
         if offset <= 0:
             # Real-time: serve frames as they arrive
             while True:
-                jpeg = cam.wait_for_frame(timeout=1.0)
+                if annotated and cam.has_detector:
+                    jpeg = cam.wait_for_annotated_frame(timeout=1.0)
+                else:
+                    jpeg = cam.wait_for_frame(timeout=1.0)
                 if jpeg:
                     yield (b"--frame\r\n"
                            b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
@@ -211,13 +237,14 @@ def history_stream(camera_id):
     if not cam:
         return jsonify({"error": "Camera not found"}), 404
 
+    annotated = request.args.get("annotated", "0") == "1"
     t = request.args.get("t", type=float)
     if t is None:
         return jsonify({"error": "Missing 't' query param (unix timestamp)"}), 400
 
     target = datetime.fromtimestamp(t, tz=timezone.utc)
 
-    for seg_name in cam.list_segments():
+    for seg_name in cam.list_segments(annotated=annotated):
         seg_ts_str = seg_name.replace(".mp4", "").rstrip("Z")
         try:
             seg_ts = datetime.strptime(seg_ts_str, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
@@ -225,11 +252,27 @@ def history_stream(camera_id):
             continue
         seg_end = seg_ts + timedelta(seconds=cam.segment_seconds)
         if seg_ts <= target < seg_end:
-            path = cam.segment_path(seg_name)
+            path = cam.segment_path(seg_name, annotated=annotated)
             if os.path.isfile(path):
                 return send_file(path, mimetype="video/mp4")
 
     return jsonify({"error": "No segment found for the given timestamp"}), 404
+
+
+# ---------------------------------------------------------------------------
+# Detections — query YOLO detection history from SQLite
+# ---------------------------------------------------------------------------
+
+@app.route("/api/detections/<camera_id>")
+def get_detections(camera_id):
+    if not _detections_db:
+        return jsonify([])
+    limit = request.args.get("limit", 100, type=int)
+    from_ts = request.args.get("from")
+    to_ts = request.args.get("to")
+    results = _detections_db.query(camera_id, limit=limit,
+                                   from_ts=from_ts, to_ts=to_ts)
+    return jsonify(results)
 
 
 # ---------------------------------------------------------------------------
