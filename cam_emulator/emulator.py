@@ -76,6 +76,7 @@ class MJPEGStreamHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         self.end_headers()
         interval = 1.0 / self.fps
+        next_frame_time = time.monotonic()
         try:
             while True:
                 frame = self._read_frame()
@@ -86,7 +87,10 @@ class MJPEGStreamHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Content-Type: image/jpeg\r\n\r\n")
                 self.wfile.write(frame)
                 self.wfile.write(b"\r\n")
-                time.sleep(interval)
+                next_frame_time += interval
+                sleep_dur = next_frame_time - time.monotonic()
+                if sleep_dur > 0:
+                    time.sleep(sleep_dur)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
