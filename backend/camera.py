@@ -46,11 +46,17 @@ class CameraStream:
     """Captures from an IP camera, maintains a ring buffer, writes MP4 segments,
     and optionally runs YOLO detection with annotated output."""
 
+    # Classes considered runway hazards (trigger notifications)
+    HAZARD_CLASSES = {"person", "dog", "cat", "bird", "car", "truck", "bus",
+                      "motorcycle", "bicycle", "horse", "deer", "bear"}
+
     def __init__(self, camera_id, url, video_dir="videos",
                  buffer_seconds=30, segment_seconds=30,
-                 detector=None, detections_db=None):
+                 detector=None, detections_db=None, mqtt_client=None):
         self.camera_id = camera_id
         self.url = url
+        self._mqtt_client = mqtt_client
+        self._notified_tracks = set()  # track_ids we already notified about
         self.fps = None  # measured on start
         self.buffer_seconds = buffer_seconds
         self.segment_seconds = segment_seconds
@@ -263,6 +269,23 @@ class CameraStream:
                     )
                 except Exception as e:
                     print(f"[detector] {self.camera_id} DB error: {e}")
+
+            # Publish notifications for new hazard tracks
+            if detections and self._mqtt_client:
+                for d in detections:
+                    tid = d["track_id"]
+                    cls = d["class_name"]
+                    if cls in self.HAZARD_CLASSES and tid not in self._notified_tracks:
+                        self._notified_tracks.add(tid)
+                        sev = "severe" if cls in ("person", "car", "truck", "bus") else "medium"
+                        try:
+                            self._mqtt_client.publish_notification(
+                                camera_id=self.camera_id,
+                                classification=f"{cls} detected on runway",
+                                severity=sev,
+                            )
+                        except Exception as e:
+                            print(f"[detector] {self.camera_id} notification error: {e}")
 
     # ------------------------------------------------------------------
     # Live stream access

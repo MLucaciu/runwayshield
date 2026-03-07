@@ -3,6 +3,8 @@ set -e
 
 cd "$(dirname "$0")"
 
+export CAMERA_2_URL="${CAMERA_2_URL:-http://10.94.117.76:8080/video}"
+
 PORT="${PORT:-8081}"
 WORKERS="${WORKERS:-1}"
 

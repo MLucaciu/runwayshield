@@ -122,6 +122,7 @@ export default function App() {
   const [activeSegment, setActiveSegment] = useState(null);
   const imgRef = useRef(null);
   const vidRef = useRef(null);
+  const lastFrameRef = useRef(Date.now());
 
   const activeCam = cameras.find((c) => c.id === activeCamId) ?? null;
 
@@ -171,6 +172,27 @@ export default function App() {
       setStreamSrc(url);
     }
   }, [activeCamId, mode, seekSeconds]);
+
+  // Reconnect the MJPEG stream with a cache-busting param
+  const reconnectStream = useCallback(() => {
+    if (!activeCamId || mode !== "live") return;
+    const base = seekSeconds > 0
+      ? `/api/stream/${activeCamId}/live?offset=${seekSeconds}`
+      : `/api/stream/${activeCamId}/live`;
+    setStreamSrc(base + (base.includes("?") ? "&" : "?") + "_t=" + Date.now());
+    lastFrameRef.current = Date.now();
+  }, [activeCamId, mode, seekSeconds]);
+
+  // Staleness check: if no MJPEG frame received in 5s, force reconnect
+  useEffect(() => {
+    if (mode !== "live" || !activeCam?.connected) return;
+    const iv = setInterval(() => {
+      if (Date.now() - lastFrameRef.current > 5000) {
+        reconnectStream();
+      }
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [mode, activeCam?.connected, reconnectStream]);
 
   const goLive = () => {
     setMode("live");
@@ -330,7 +352,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {activeCam?.online && streamSrc ? (
+                  {activeCam?.connected && streamSrc ? (
                     mode === "history" ? (
                       <video
                         ref={vidRef}
@@ -357,12 +379,14 @@ export default function App() {
                         className="stream-img"
                         src={streamSrc}
                         alt={activeCam.name}
+                        onLoad={() => { lastFrameRef.current = Date.now(); }}
+                        onError={() => { setTimeout(reconnectStream, 2000); }}
                       />
                     )
                   ) : (
                     <div className="stream-offline">
                       <ShieldIcon size={36} />
-                      <p>{activeCam ? "Camera feed unavailable" : "No cameras configured"}</p>
+                      <p>{activeCam ? (activeCam.online ? "Camera disconnected — waiting for reconnect..." : "Camera feed unavailable") : "No cameras configured"}</p>
                     </div>
                   )}
 
@@ -432,7 +456,7 @@ export default function App() {
                         onClick={() => handleCamSwitch(cam)}
                       >
                         <div className="thumb-preview">
-                          {cam.online ? (
+                          {cam.connected ? (
                             <img src={cam.stream_url} alt={cam.name} />
                           ) : (
                             <div className="thumb-off">

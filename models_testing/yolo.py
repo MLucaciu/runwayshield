@@ -7,7 +7,7 @@
 # while True:
 #     ret, frame = cap.read()
 #     results = model(frame)
-#     annotated = results[0].plot()
+#     annotated = results[0].plot(boxes=True, masks=True)
 #     cv2.imshow("Runway Detection", annotated)
 #     if cv2.waitKey(1) == ord("q"):
 #         break
@@ -52,7 +52,7 @@ while True:
 
     # Use .track() instead of .predict() — enables ByteTrack by default
     results = model.track(frame, persist=True, verbose=False, tracker="bytetrack.yaml")
-    annotated = results[0].plot()
+    annotated = results[0].plot(boxes=True, masks=True)
 
     # Draw trajectory trails for each tracked object
     boxes = results[0].boxes

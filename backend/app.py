@@ -9,6 +9,8 @@ from flask_cors import CORS
 from camera import CameraStream
 from detector import Detector
 from detections_db import DetectionsDB
+from notifications_db import NotificationsDB
+from mqtt_client import MQTTNotificationClient
 
 app = Flask(__name__)
 CORS(app)
@@ -33,25 +35,43 @@ cameras: dict[str, CameraStream] = {}
 _cameras_started = False
 
 YOLO_MODEL = os.environ.get("YOLO_MODEL_PATH", "yolo11n-seg.pt")
+MQTT_BROKER_HOST = os.environ.get("MQTT_BROKER_HOST", "localhost")
+MQTT_BROKER_PORT = int(os.environ.get("MQTT_BROKER_PORT", "1883"))
+SOURCE_IP = os.environ.get("SOURCE_IP", None)  # auto-detected if not set
+
 _detections_db = None
+_notifications_db = None
+_mqtt_client = None
 
 
-def _shutdown_cameras():
+def _shutdown():
     for cam_id, cam in cameras.items():
         print(f"[camera] {cam_id} shutting down…")
         cam.stop()
+    if _mqtt_client:
+        _mqtt_client.stop()
 
-atexit.register(_shutdown_cameras)
+atexit.register(_shutdown)
 
 
 def start_cameras():
-    global _cameras_started, _detections_db
+    global _cameras_started, _detections_db, _notifications_db, _mqtt_client
     if _cameras_started:
         return
     _cameras_started = True
 
-    # Initialise YOLO detector (ultralytics auto-downloads standard models)
+    # Initialise databases
     _detections_db = DetectionsDB(os.path.join("data", "detections.db"))
+    _notifications_db = NotificationsDB(os.path.join("data", "notifications.db"))
+
+    # Start MQTT client
+    _mqtt_client = MQTTNotificationClient(
+        _notifications_db,
+        broker_host=MQTT_BROKER_HOST,
+        broker_port=MQTT_BROKER_PORT,
+        source_ip=SOURCE_IP,
+    )
+    _mqtt_client.start()
     try:
         _test_detector = Detector(YOLO_MODEL)
         del _test_detector
@@ -65,7 +85,8 @@ def start_cameras():
         detector = Detector(YOLO_MODEL) if yolo_ok else None
         cam = CameraStream(camera_id=cam_id, url=cfg["url"], video_dir="videos",
                            buffer_seconds=45, detector=detector,
-                           detections_db=_detections_db)
+                           detections_db=_detections_db,
+                           mqtt_client=_mqtt_client)
         try:
             cam.start()
             cameras[cam_id] = cam
@@ -146,17 +167,50 @@ def list_cameras():
 
 
 # ---------------------------------------------------------------------------
-# Notifications (stub endpoints the React dashboard calls)
+# Notifications — backed by SQLite, broadcast via MQTT
 # ---------------------------------------------------------------------------
 
 @app.route("/api/notifications/history")
 def notifications_history():
-    return jsonify([])
+    if not _notifications_db:
+        return jsonify([])
+    limit = request.args.get("limit", 100, type=int)
+    from_ts = request.args.get("from")
+    to_ts = request.args.get("to")
+    return jsonify(_notifications_db.query_history(limit=limit, from_ts=from_ts, to_ts=to_ts))
 
 
 @app.route("/api/notifications/live")
 def notifications_live():
-    return jsonify([])
+    if not _notifications_db:
+        return jsonify([])
+    return jsonify(_notifications_db.query_live())
+
+
+@app.route("/api/notifications", methods=["POST"])
+def create_notification():
+    if not _mqtt_client:
+        return jsonify({"error": "MQTT not initialised"}), 503
+    data = request.get_json(force=True)
+    camera_id = data.get("camera_id", "")
+    classification = data.get("classification", "Unknown event")
+    severity = data.get("severity", "low")
+    notif_type = data.get("type", "detection")
+    notification = _mqtt_client.publish_notification(
+        camera_id=camera_id,
+        classification=classification,
+        severity=severity,
+        notif_type=notif_type,
+    )
+    return jsonify(notification), 201
+
+
+@app.route("/api/notifications/<notif_id>/resolve", methods=["POST"])
+def resolve_notification(notif_id):
+    if not _mqtt_client:
+        return jsonify({"error": "MQTT not initialised"}), 503
+    _mqtt_client.resolve_notification(notif_id)
+    return jsonify({"status": "resolved"})
 
 
 # ---------------------------------------------------------------------------
