@@ -155,7 +155,7 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
-    const iv = setInterval(fetchData, 5000);
+    const iv = setInterval(fetchData, 8081);
     return () => clearInterval(iv);
   }, [fetchData]);
 

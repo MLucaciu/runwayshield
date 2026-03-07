@@ -40,11 +40,11 @@ cd backend
 python app.py
 ```
 
-The API server starts on **http://localhost:5000**.
+The API server starts on **http://localhost:8081**.
 You can verify it works:
 
 ```bash
-curl http://localhost:5000/api/status
+curl http://localhost:8081/api/status
 ```
 
 #### 3. Install frontend dependencies
@@ -116,4 +116,4 @@ models_testing/    ML model experiments
 | Service  | Port | URL                     |
 |----------|------|-------------------------|
 | Frontend | 3000 | http://localhost:3000    |
-| Backend  | 5000 | http://localhost:5000    |
+| Backend  | 8081 | http://localhost:8081    |
