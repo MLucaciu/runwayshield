@@ -441,12 +441,108 @@
 .playback-controls {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.4rem 0.75rem;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
   background: var(--bg-controls);
   border-top: 1px solid var(--border-accent-subtle);
   flex-shrink: 0;
-  flex-wrap: wrap;
+}
+
+/* ── Timeline scrubber ─────────────────────────────────────────── */
+.timeline-bar {
+  flex: 1;
+  cursor: pointer;
+  padding: 0.2rem 0;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.timeline-track {
+  position: relative;
+  height: 6px;
+  background: var(--border-ctrl);
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.timeline-filled {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-light));
+  border-radius: 3px;
+  transition: width 0.08s ease-out;
+}
+
+.timeline-thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  border: 2px solid var(--bg-controls);
+  box-shadow: 0 0 8px var(--accent-glow), 0 0 0 2px var(--accent);
+  transform: translate(-50%, -50%);
+  transition: left 0.08s ease-out;
+  z-index: 2;
+}
+
+.timeline-bar:hover .timeline-thumb {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 12px var(--accent-glow), 0 0 0 3px var(--accent);
+}
+
+.timeline-tick {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 12px;
+  background: var(--text-dim);
+  opacity: 0.3;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.timeline-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  padding: 0 2px;
+}
+
+.timeline-label-live {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--sev-red);
+  font-weight: 700;
+}
+
+.timeline-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.timeline-offset {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent-light);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 2rem;
+  text-align: center;
 }
 
 .ctrl-btn {
@@ -487,48 +583,6 @@
   background: var(--sev-red);
   flex-shrink: 0;
   box-shadow: 0 0 4px rgba(240, 72, 88, 0.5);
-}
-
-.ctrl-divider {
-  width: 1px;
-  height: 16px;
-  background: var(--border-ctrl);
-  margin: 0 0.15rem;
-  flex-shrink: 0;
-}
-
-.ctrl-seek {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: auto;
-  background: var(--bg-ctrl-btn);
-  border: 1px solid var(--border-ctrl);
-  border-radius: var(--radius-sm);
-  padding: 0.22rem 0.6rem;
-}
-
-.ctrl-seek-label {
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.ctrl-slider {
-  width: 90px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.ctrl-seek-val {
-  font-size: 0.6rem;
-  color: var(--text-secondary);
-  min-width: 22px;
-  text-align: right;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  font-family: var(--font-mono);
 }
 
 /* ── Camera sidebar ─────────────────────────────────────────────── */
@@ -939,8 +993,8 @@
   .bottom-map-panel { min-height: 200px; }
   .bottom-alerts-panel { max-height: 300px; }
 
-  .ctrl-seek { display: none; }
-  .ctrl-divider:last-of-type { display: none; }
+  .timeline-labels { font-size: 0.5rem; }
+  .timeline-thumb { width: 12px; height: 12px; }
 }
 
 @media (max-width: 480px) {

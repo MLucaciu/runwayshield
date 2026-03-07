@@ -408,41 +408,69 @@ export default function App() {
                   </div>
 
                   <div className="playback-controls">
-                    <button
-                      className={`ctrl-btn ${mode === "live" && !seekSeconds ? "ctrl-active" : ""}`}
-                      onClick={goLive}
+                    <div className="timeline-bar"
+                      onMouseDown={(e) => {
+                        const bar = e.currentTarget;
+                        const update = (clientX) => {
+                          const rect = bar.getBoundingClientRect();
+                          const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                          const secs = Math.round((1 - ratio) * 30);
+                          if (secs === 0) goLive();
+                          else seekBack(secs);
+                        };
+                        update(e.clientX);
+                        const onMove = (ev) => update(ev.clientX);
+                        const onUp = () => {
+                          window.removeEventListener("mousemove", onMove);
+                          window.removeEventListener("mouseup", onUp);
+                        };
+                        window.addEventListener("mousemove", onMove);
+                        window.addEventListener("mouseup", onUp);
+                      }}
+                      onTouchStart={(e) => {
+                        const bar = e.currentTarget;
+                        const update = (clientX) => {
+                          const rect = bar.getBoundingClientRect();
+                          const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                          const secs = Math.round((1 - ratio) * 30);
+                          if (secs === 0) goLive();
+                          else seekBack(secs);
+                        };
+                        update(e.touches[0].clientX);
+                        const onMove = (ev) => update(ev.touches[0].clientX);
+                        const onEnd = () => {
+                          window.removeEventListener("touchmove", onMove);
+                          window.removeEventListener("touchend", onEnd);
+                        };
+                        window.addEventListener("touchmove", onMove);
+                        window.addEventListener("touchend", onEnd);
+                      }}
                     >
-                      <span className="ctrl-live-dot" />
-                      Live
-                    </button>
-                    <div className="ctrl-divider" />
-                    {[5, 10, 30].map((s) => (
-                      <button
-                        key={s}
-                        className={`ctrl-btn ${seekSeconds === s && !activeSegment ? "ctrl-active" : ""}`}
-                        onClick={() => seekBack(s)}
-                      >
-                        -{s}s
-                      </button>
-                    ))}
-                    <div className="ctrl-divider" />
-                    <div className="ctrl-seek">
-                      <label className="ctrl-seek-label">Rewind</label>
-                      <input
-                        type="range"
-                        className="ctrl-slider"
-                        min="0"
-                        max="30"
-                        step="1"
-                        value={seekSeconds}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value, 10);
-                          if (v === 0) goLive();
-                          else seekBack(v);
-                        }}
-                      />
-                      <span className="ctrl-seek-val">{seekSeconds}s</span>
+                      <div className="timeline-track">
+                        <div className="timeline-filled" style={{ width: `${((30 - seekSeconds) / 30) * 100}%` }} />
+                        <div className="timeline-thumb" style={{ left: `${((30 - seekSeconds) / 30) * 100}%` }} />
+                        {[0, 5, 10, 15, 20, 25, 30].map((s) => (
+                          <div key={s} className="timeline-tick" style={{ left: `${((30 - s) / 30) * 100}%` }} />
+                        ))}
+                      </div>
+                      <div className="timeline-labels">
+                        <span>-30s</span>
+                        <span>-20s</span>
+                        <span>-10s</span>
+                        <span className="timeline-label-live">
+                          <span className="ctrl-live-dot" />
+                          LIVE
+                        </span>
+                      </div>
                     </div>
+                    {(seekSeconds > 0 || activeSegment) && (
+                      <div className="timeline-status">
+                        <button className="ctrl-btn" onClick={goLive}>
+                          <span className="ctrl-live-dot" /> Go live
+                        </button>
+                        <span className="timeline-offset">-{seekSeconds}s</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

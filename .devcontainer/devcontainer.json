@@ -4,7 +4,7 @@
   "service": "app",
   "workspaceFolder": "/workspace",
   "forwardPorts": [3000, 8081],
-  "postCreateCommand": "cd /workspace/backend && pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && pip install -r requirements.txt && cd /workspace/frontend && npm install",
+  "postCreateCommand": "bash /workspace/.devcontainer/setup.sh",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -14,7 +14,7 @@
         "esbenp.prettier-vscode"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/usr/local/bin/python"
+        "python.defaultInterpreterPath": "/usr/local/bin/python3"
       }
     }
   }

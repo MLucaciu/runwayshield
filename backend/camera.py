@@ -210,8 +210,15 @@ class CameraStream:
             with self._buffer_lock:
                 self.ring_buffer.append((now, jpeg_bytes))
 
-            # Write raw frame to disk segment
-            self._write_frame(frame, now)
+            # Write raw frame to disk segment (non-fatal — don't kill the
+            # capture loop if ffmpeg is missing or segment writing fails)
+            try:
+                self._write_frame(frame, now)
+            except Exception as e:
+                if not getattr(self, '_write_warn', False):
+                    print(f"[camera] {self.camera_id} segment write failed "
+                          f"(live stream unaffected): {e}")
+                    self._write_warn = True
 
             # Feed detection thread and write annotated segment
             if self._detector:
@@ -222,7 +229,13 @@ class CameraStream:
                 with self._annotated_frame_lock:
                     ann_frame = self._latest_annotated_frame
                 if ann_frame is not None:
-                    self._write_annotated_frame(ann_frame, now)
+                    try:
+                        self._write_annotated_frame(ann_frame, now)
+                    except Exception as e:
+                        if not getattr(self, '_ann_write_warn', False):
+                            print(f"[camera] {self.camera_id} annotated segment "
+                                  f"write failed: {e}")
+                            self._ann_write_warn = True
 
     # ------------------------------------------------------------------
     # Detection loop (runs in separate thread)
