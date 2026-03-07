@@ -4,6 +4,7 @@ set -e
 cd "$(dirname "$0")"
 
 export CAMERA_2_URL="${CAMERA_2_URL:-http://0.0.0.0:8554/video}"
+export YOLO_MODEL_PATH="yolo26n.pt"
 
 PORT="${PORT:-8081}"
 WORKERS="${WORKERS:-1}"
