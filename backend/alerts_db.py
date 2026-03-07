@@ -23,10 +23,23 @@ class AlertsDB:
         return self._local.conn
 
     def clear_all(self):
-        """Delete all alerts and logs for a fresh start."""
+        """Finalize stale alerts from a previous run.
+
+        Active (unacknowledged) alerts become 'closed'.
+        Acknowledged alerts become 'resolved' (operator handled them).
+        """
         conn = self._conn()
-        conn.execute("DELETE FROM alert_logs")
-        conn.execute("DELETE FROM alerts")
+        now = self._now_iso()
+        conn.execute(
+            "UPDATE alerts SET status = 'resolved', closed_at = ?, updated_at = ? "
+            "WHERE status = 'acknowledged'",
+            (now, now),
+        )
+        conn.execute(
+            "UPDATE alerts SET status = 'closed', closed_at = ?, updated_at = ? "
+            "WHERE status = 'active'",
+            (now, now),
+        )
         conn.commit()
 
     def _init_schema(self):
@@ -126,15 +139,25 @@ class AlertsDB:
         return self._get(conn, alert_id), True
 
     def close_alert(self, alert_id):
-        """Close an alert (object left the zone)."""
+        """Close an alert (object left the zone).
+
+        Acknowledged alerts transition to 'resolved' to preserve the
+        acknowledgment; unacknowledged active alerts become 'closed'.
+        """
         conn = self._conn()
         now = self._now_iso()
+        row = conn.execute(
+            "SELECT status FROM alerts WHERE id = ?", (alert_id,)
+        ).fetchone()
+        if not row or row["status"] not in ("active", "acknowledged"):
+            return
+        new_status = "resolved" if row["status"] == "acknowledged" else "closed"
         conn.execute(
-            "UPDATE alerts SET status = 'closed', closed_at = ?, updated_at = ? "
-            "WHERE id = ? AND status IN ('active', 'acknowledged')",
-            (now, now, alert_id),
+            "UPDATE alerts SET status = ?, closed_at = ?, updated_at = ? "
+            "WHERE id = ?",
+            (new_status, now, now, alert_id),
         )
-        self._log(conn, alert_id, "closed")
+        self._log(conn, alert_id, new_status)
         conn.commit()
 
     def acknowledge(self, alert_id, username):
@@ -215,7 +238,7 @@ class AlertsDB:
                       object_type=None, severity=None, from_ts=None, to_ts=None):
         """Return acknowledged/closed alerts for the reports page."""
         conn = self._conn()
-        sql = "SELECT * FROM alerts WHERE status IN ('acknowledged', 'closed')"
+        sql = "SELECT * FROM alerts WHERE status IN ('acknowledged', 'closed', 'resolved')"
         params = []
         if camera_id:
             sql += " AND camera_id = ?"
@@ -238,6 +261,31 @@ class AlertsDB:
         sql += " ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
         return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+    def delete_by_ids(self, ids):
+        """Delete alerts and their logs by a list of IDs. Returns count deleted."""
+        if not ids:
+            return 0
+        conn = self._conn()
+        placeholders = ",".join("?" for _ in ids)
+        conn.execute(f"DELETE FROM alert_logs WHERE alert_id IN ({placeholders})", ids)
+        cur = conn.execute(f"DELETE FROM alerts WHERE id IN ({placeholders})", ids)
+        conn.commit()
+        return cur.rowcount
+
+    def delete_all_reports(self):
+        """Delete all non-active alerts (reports). Returns count deleted."""
+        conn = self._conn()
+        ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM alerts WHERE status NOT IN ('active', 'acknowledged')"
+        ).fetchall()]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        conn.execute(f"DELETE FROM alert_logs WHERE alert_id IN ({placeholders})", ids)
+        cur = conn.execute(f"DELETE FROM alerts WHERE id IN ({placeholders})", ids)
+        conn.commit()
+        return cur.rowcount
 
     def get_by_id(self, alert_id):
         conn = self._conn()

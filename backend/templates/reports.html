@@ -214,11 +214,12 @@ body {
   border: 1px solid var(--border-accent);
 }
 
-.filters-row {
+.toolbar-row {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 0.85rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .filter-select {
@@ -244,6 +245,31 @@ body {
   background: var(--bg-panel);
   color: var(--text-primary);
 }
+
+.toolbar-spacer { flex: 1; }
+
+.btn-delete {
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(240,72,88,0.3);
+  background: rgba(240,72,88,0.1);
+  color: var(--sev-red);
+  cursor: pointer;
+  transition: all 0.18s;
+  outline: none;
+  display: none;
+}
+
+.btn-delete:hover {
+  background: rgba(240,72,88,0.2);
+  border-color: var(--sev-red);
+  box-shadow: 0 0 8px rgba(240,72,88,0.2);
+}
+
+.btn-delete.visible { display: inline-flex; align-items: center; gap: 0.3rem; }
 
 .table-wrap {
   background: var(--bg-panel);
@@ -284,8 +310,9 @@ thead th {
 }
 
 thead th:hover { color: var(--accent); }
-
 thead th.sorted { color: var(--accent-light); }
+thead th.no-sort { cursor: default; }
+thead th.no-sort:hover { color: var(--text-muted); }
 
 thead th .sort-arrow {
   display: inline-block;
@@ -313,6 +340,20 @@ td {
   vertical-align: middle;
 }
 
+.td-check {
+  width: 32px;
+  text-align: center;
+  padding-left: 0.5rem;
+  padding-right: 0;
+}
+
+.td-check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
 .sev-badge {
   display: inline-block;
   font-size: 0.56rem;
@@ -338,6 +379,7 @@ td {
 }
 
 .st-acknowledged { color: var(--sev-amber); }
+.st-resolved { color: var(--sev-green); }
 .st-closed { color: var(--text-dim); }
 .st-active { color: var(--sev-red); }
 
@@ -356,6 +398,72 @@ td {
   color: var(--text-dim);
   font-size: 0.9rem;
   font-style: italic;
+}
+
+/* ── Pagination ──────────────────────────────────────────────── */
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.85rem;
+  border-top: 1px solid var(--border-accent-subtle);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.pagination-info {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.pagination-btn {
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  outline: none;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pagination-btn.active {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.page-size-select {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.2rem 0.35rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
 }
 
 /* ── Modal ────────────────────────────────────────────────────── */
@@ -452,7 +560,8 @@ td {
   position: relative;
 }
 
-.modal-video-wrap video {
+.modal-video-wrap video,
+.modal-video-wrap img {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -599,7 +708,7 @@ td {
         <span class="page-count" id="totalCount">0 reports</span>
       </div>
 
-      <div class="filters-row">
+      <div class="toolbar-row">
         <select class="filter-select" id="filterSeverity">
           <option value="">All severities</option>
           <option value="severe">Severe</option>
@@ -609,6 +718,7 @@ td {
         <select class="filter-select" id="filterStatus">
           <option value="">All statuses</option>
           <option value="acknowledged">Acknowledged</option>
+          <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </select>
         <select class="filter-select" id="filterCamera">
@@ -617,6 +727,15 @@ td {
         <select class="filter-select" id="filterObject">
           <option value="">All objects</option>
         </select>
+        <div class="toolbar-spacer"></div>
+        <button class="btn-delete" id="btnDeleteSelected">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          <span id="deleteLabel">Delete selected</span>
+        </button>
+        <button class="btn-delete" id="btnDeleteAll">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Delete all
+        </button>
       </div>
 
       <div class="table-wrap">
@@ -624,6 +743,7 @@ td {
           <table>
             <thead>
               <tr>
+                <th class="td-check no-sort"><input type="checkbox" id="selectAll" title="Select all"></th>
                 <th data-col="id">ID <span class="sort-arrow">&#9660;</span></th>
                 <th data-col="severity">Severity <span class="sort-arrow">&#9660;</span></th>
                 <th data-col="object_type">Object <span class="sort-arrow">&#9660;</span></th>
@@ -640,6 +760,22 @@ td {
           </table>
         </div>
         <div class="empty-state" id="emptyState" style="display:none;">No reports yet. Acknowledged alerts will appear here.</div>
+        <div class="pagination-row" id="paginationRow">
+          <div class="pagination-info" id="paginationInfo"></div>
+          <div class="pagination-controls">
+            <span style="font-size:0.6rem;color:var(--text-muted);margin-right:0.3rem;">Rows:</span>
+            <select class="page-size-select" id="pageSizeSelect">
+              <option value="15" selected>15</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+            <button class="pagination-btn" id="pgFirst" title="First page">&laquo;</button>
+            <button class="pagination-btn" id="pgPrev" title="Previous page">&lsaquo;</button>
+            <span id="pgNumbers"></span>
+            <button class="pagination-btn" id="pgNext" title="Next page">&rsaquo;</button>
+            <button class="pagination-btn" id="pgLast" title="Last page">&raquo;</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -659,26 +795,40 @@ td {
 (function() {
   "use strict";
 
-  let reports = [];
-  let sortCol = "created_at";
-  let sortAsc = false;
+  var reports = [];
+  var sortCol = "created_at";
+  var sortAsc = false;
+  var selectedIds = new Set();
+  var currentPage = 1;
+  var pageSize = 15;
 
-  const tbody = document.getElementById("reportsTbody");
-  const emptyState = document.getElementById("emptyState");
-  const totalCount = document.getElementById("totalCount");
-  const modalOverlay = document.getElementById("modalOverlay");
-  const modalClose = document.getElementById("modalClose");
-  const modalTitle = document.getElementById("modalTitle");
-  const modalBody = document.getElementById("modalBody");
-  const filterSeverity = document.getElementById("filterSeverity");
-  const filterStatus = document.getElementById("filterStatus");
-  const filterCamera = document.getElementById("filterCamera");
-  const filterObject = document.getElementById("filterObject");
+  var tbody = document.getElementById("reportsTbody");
+  var emptyState = document.getElementById("emptyState");
+  var totalCount = document.getElementById("totalCount");
+  var modalOverlay = document.getElementById("modalOverlay");
+  var modalClose = document.getElementById("modalClose");
+  var modalTitle = document.getElementById("modalTitle");
+  var modalBody = document.getElementById("modalBody");
+  var filterSeverity = document.getElementById("filterSeverity");
+  var filterStatus = document.getElementById("filterStatus");
+  var filterCamera = document.getElementById("filterCamera");
+  var filterObject = document.getElementById("filterObject");
+  var selectAllCb = document.getElementById("selectAll");
+  var btnDeleteSelected = document.getElementById("btnDeleteSelected");
+  var btnDeleteAll = document.getElementById("btnDeleteAll");
+  var deleteLabel = document.getElementById("deleteLabel");
+  var pageSizeSelect = document.getElementById("pageSizeSelect");
+  var pgFirst = document.getElementById("pgFirst");
+  var pgPrev = document.getElementById("pgPrev");
+  var pgNext = document.getElementById("pgNext");
+  var pgLast = document.getElementById("pgLast");
+  var pgNumbers = document.getElementById("pgNumbers");
+  var pgInfo = document.getElementById("paginationInfo");
 
-  const SEV_ORDER = { severe: 0, medium: 1, low: 2 };
+  var SEV_ORDER = { severe: 0, medium: 1, low: 2 };
 
   // ── Theme ──────────────────────────────────────────────────────
-  let theme = localStorage.getItem("rws-theme") || "dark";
+  var theme = localStorage.getItem("rws-theme") || "dark";
   document.documentElement.setAttribute("data-theme", theme);
   updateThemeIcon();
 
@@ -703,7 +853,7 @@ td {
   }
 
   function fmtDateTime(iso) {
-    if (!iso) return "—";
+    if (!iso) return "\u2014";
     try {
       var d = new Date(iso);
       return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) +
@@ -712,7 +862,7 @@ td {
   }
 
   function fmtDuration(created, closed) {
-    if (!created) return "—";
+    if (!created) return "\u2014";
     var start = new Date(created);
     var end = closed ? new Date(closed) : new Date();
     var diff = Math.max(0, Math.floor((end - start) / 1000));
@@ -801,20 +951,127 @@ td {
     });
   }
 
+  // ── Selection ─────────────────────────────────────────────────
+  function updateDeleteButtons() {
+    var count = selectedIds.size;
+    if (count > 0) {
+      btnDeleteSelected.classList.add("visible");
+      deleteLabel.textContent = "Delete selected (" + count + ")";
+    } else {
+      btnDeleteSelected.classList.remove("visible");
+    }
+    btnDeleteAll.classList.toggle("visible", reports.length > 0);
+  }
+
+  function syncSelectAll() {
+    var pageItems = getCurrentPageItems();
+    if (!pageItems.length) { selectAllCb.checked = false; selectAllCb.indeterminate = false; return; }
+    var allChecked = pageItems.every(function(r) { return selectedIds.has(r.id); });
+    var someChecked = pageItems.some(function(r) { return selectedIds.has(r.id); });
+    selectAllCb.checked = allChecked;
+    selectAllCb.indeterminate = !allChecked && someChecked;
+  }
+
+  selectAllCb.addEventListener("change", function() {
+    var pageItems = getCurrentPageItems();
+    if (selectAllCb.checked) {
+      pageItems.forEach(function(r) { selectedIds.add(r.id); });
+    } else {
+      pageItems.forEach(function(r) { selectedIds.delete(r.id); });
+    }
+    updateDeleteButtons();
+    renderRows();
+  });
+
+  // ── Pagination helpers ────────────────────────────────────────
+  var _lastSorted = [];
+
+  function getCurrentPageItems() {
+    var start = (currentPage - 1) * pageSize;
+    return _lastSorted.slice(start, start + pageSize);
+  }
+
+  function getTotalPages() {
+    return Math.max(1, Math.ceil(_lastSorted.length / pageSize));
+  }
+
+  function clampPage() {
+    var total = getTotalPages();
+    if (currentPage > total) currentPage = total;
+    if (currentPage < 1) currentPage = 1;
+  }
+
+  function renderPagination() {
+    var total = getTotalPages();
+    var count = _lastSorted.length;
+    var start = (currentPage - 1) * pageSize + 1;
+    var end = Math.min(currentPage * pageSize, count);
+
+    pgInfo.textContent = count ? start + "\u2013" + end + " of " + count : "0 reports";
+
+    pgFirst.disabled = currentPage <= 1;
+    pgPrev.disabled = currentPage <= 1;
+    pgNext.disabled = currentPage >= total;
+    pgLast.disabled = currentPage >= total;
+
+    pgNumbers.innerHTML = "";
+    var maxButtons = 5;
+    var startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+    var endPage = Math.min(total, startPage + maxButtons - 1);
+    if (endPage - startPage < maxButtons - 1) startPage = Math.max(1, endPage - maxButtons + 1);
+
+    for (var p = startPage; p <= endPage; p++) {
+      var btn = document.createElement("button");
+      btn.className = "pagination-btn" + (p === currentPage ? " active" : "");
+      btn.textContent = p;
+      btn.dataset.page = p;
+      btn.addEventListener("click", function() {
+        currentPage = parseInt(this.dataset.page);
+        renderRows();
+        renderPagination();
+        syncSelectAll();
+      });
+      pgNumbers.appendChild(btn);
+    }
+  }
+
+  pgFirst.addEventListener("click", function() { currentPage = 1; renderRows(); renderPagination(); syncSelectAll(); });
+  pgPrev.addEventListener("click", function() { currentPage--; clampPage(); renderRows(); renderPagination(); syncSelectAll(); });
+  pgNext.addEventListener("click", function() { currentPage++; clampPage(); renderRows(); renderPagination(); syncSelectAll(); });
+  pgLast.addEventListener("click", function() { currentPage = getTotalPages(); renderRows(); renderPagination(); syncSelectAll(); });
+
+  pageSizeSelect.addEventListener("change", function() {
+    pageSize = parseInt(pageSizeSelect.value);
+    currentPage = 1;
+    renderRows();
+    renderPagination();
+    syncSelectAll();
+  });
+
   // ── Render ─────────────────────────────────────────────────────
   function render() {
     var filtered = getFiltered();
-    var sorted = getSorted(filtered);
+    _lastSorted = getSorted(filtered);
 
-    totalCount.textContent = sorted.length + " report" + (sorted.length !== 1 ? "s" : "");
+    totalCount.textContent = _lastSorted.length + " report" + (_lastSorted.length !== 1 ? "s" : "");
 
-    document.querySelectorAll("thead th").forEach(function(th) {
+    document.querySelectorAll("thead th[data-col]").forEach(function(th) {
       th.classList.toggle("sorted", th.dataset.col === sortCol);
       var arrow = th.querySelector(".sort-arrow");
       if (arrow) arrow.innerHTML = (th.dataset.col === sortCol && sortAsc) ? "&#9650;" : "&#9660;";
     });
 
-    if (!sorted.length) {
+    clampPage();
+    renderRows();
+    renderPagination();
+    updateDeleteButtons();
+    syncSelectAll();
+  }
+
+  function renderRows() {
+    var pageItems = getCurrentPageItems();
+
+    if (!_lastSorted.length) {
       tbody.innerHTML = "";
       emptyState.style.display = "";
       return;
@@ -822,11 +1079,25 @@ td {
     emptyState.style.display = "none";
 
     tbody.innerHTML = "";
-    sorted.forEach(function(r) {
+    pageItems.forEach(function(r) {
       var tr = document.createElement("tr");
-      tr.addEventListener("click", function() { openModal(r); });
 
-      tr.innerHTML =
+      var tdCb = document.createElement("td");
+      tdCb.className = "td-check";
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selectedIds.has(r.id);
+      cb.addEventListener("click", function(e) { e.stopPropagation(); });
+      cb.addEventListener("change", function(e) {
+        if (cb.checked) { selectedIds.add(r.id); } else { selectedIds.delete(r.id); }
+        updateDeleteButtons();
+        syncSelectAll();
+      });
+      tdCb.appendChild(cb);
+      tr.appendChild(tdCb);
+
+      var rest = document.createElement("template");
+      rest.innerHTML =
         '<td class="td-mono">' + esc(String(r.id)) + '</td>' +
         '<td><span class="sev-badge sev-' + esc(r.severity) + '">' + esc((r.severity || "").toUpperCase()) + '</span></td>' +
         '<td class="td-cap">' + esc(r.object_type) + '</td>' +
@@ -834,33 +1105,70 @@ td {
         '<td>' + esc(r.camera_name || r.camera_id) + '</td>' +
         '<td><span class="status-badge st-' + esc(r.status) + '">' + esc((r.status || "").toUpperCase()) + '</span></td>' +
         '<td class="td-mono">' + esc(fmtDateTime(r.created_at)) + '</td>' +
-        '<td>' + esc(r.acknowledged_by || "—") + '</td>' +
+        '<td>' + esc(r.acknowledged_by || "\u2014") + '</td>' +
         '<td class="td-mono">' + esc(fmtDateTime(r.acknowledged_at)) + '</td>' +
         '<td class="td-mono">' + esc(fmtDuration(r.created_at, r.closed_at)) + '</td>';
+      while (rest.content.firstChild) tr.appendChild(rest.content.firstChild);
 
+      tr.addEventListener("click", function() { openModal(r); });
       tbody.appendChild(tr);
     });
   }
 
   // ── Sorting ────────────────────────────────────────────────────
-  document.querySelectorAll("thead th").forEach(function(th) {
+  document.querySelectorAll("thead th[data-col]").forEach(function(th) {
     th.addEventListener("click", function() {
       var col = th.dataset.col;
       if (!col) return;
       if (sortCol === col) { sortAsc = !sortAsc; }
       else { sortCol = col; sortAsc = false; }
+      currentPage = 1;
       render();
     });
   });
 
   // ── Filters ────────────────────────────────────────────────────
-  filterSeverity.addEventListener("change", render);
-  filterStatus.addEventListener("change", render);
-  filterCamera.addEventListener("change", render);
-  filterObject.addEventListener("change", render);
+  function onFilterChange() { currentPage = 1; selectedIds.clear(); render(); }
+  filterSeverity.addEventListener("change", onFilterChange);
+  filterStatus.addEventListener("change", onFilterChange);
+  filterCamera.addEventListener("change", onFilterChange);
+  filterObject.addEventListener("change", onFilterChange);
+
+  // ── Delete ─────────────────────────────────────────────────────
+  btnDeleteSelected.addEventListener("click", async function() {
+    var ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    if (!confirm("Delete " + ids.length + " selected report" + (ids.length > 1 ? "s" : "") + "?")) return;
+    try {
+      await fetch("/api/alerts/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ids }),
+      });
+      selectedIds.clear();
+      await loadReports();
+    } catch(e) { console.error("Delete failed", e); }
+  });
+
+  btnDeleteAll.addEventListener("click", async function() {
+    if (!confirm("Delete ALL " + reports.length + " reports? This cannot be undone.")) return;
+    try {
+      await fetch("/api/alerts/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all: true }),
+      });
+      selectedIds.clear();
+      await loadReports();
+    } catch(e) { console.error("Delete all failed", e); }
+  });
 
   // ── Modal ──────────────────────────────────────────────────────
   function closeModal() {
+    var liveImg = document.getElementById("modalLive");
+    if (liveImg) liveImg.src = "";
+    var vid = document.getElementById("modalVideo");
+    if (vid) { vid.pause(); vid.removeAttribute("src"); vid.load(); }
     modalOverlay.classList.remove("open");
     modalBody.innerHTML = "";
   }
@@ -873,21 +1181,43 @@ td {
     if (e.key === "Escape") closeModal();
   });
 
-  async function openModal(alert) {
+  async function openModal(alertRow) {
+    var alert = alertRow;
+    try {
+      var freshRes = await fetch("/api/alerts/" + alertRow.id);
+      if (freshRes.ok) {
+        var freshData = await freshRes.json();
+        freshData.camera_name = alertRow.camera_name || freshData.camera_name;
+        alert = freshData;
+      }
+    } catch(e) {}
+
     var zoneName = alert.zone_name || alert.zone_id || "Unknown Zone";
     var cameraName = alert.camera_name || alert.camera_id || "Unknown Camera";
-    modalTitle.textContent = (alert.object_type || "Alert") + " in " + zoneName + " — #" + alert.id;
+    modalTitle.textContent = (alert.object_type || "Alert") + " in " + zoneName + " \u2014 #" + alert.id;
 
     var html = '';
 
-    var videoUrl = "/api/stream/" + encodeURIComponent(alert.camera_id) +
-                   "/history?t=" + (new Date(alert.created_at).getTime() / 1000) +
-                   "&annotated=1";
+    var camEncoded = encodeURIComponent(alert.camera_id);
+    var createdMs = new Date(alert.created_at).getTime();
+    var ageSeconds = (Date.now() - createdMs) / 1000;
+    var isRecent = alert.status === "active" || ageSeconds < 30;
 
-    html += '<div class="modal-video-wrap">' +
-            '<video id="modalVideo" controls preload="auto">' +
-            '<source src="' + esc(videoUrl) + '" type="video/mp4">' +
-            '</video></div>';
+    if (isRecent) {
+      var offset = Math.max(0, Math.min(30, Math.round(ageSeconds)));
+      var liveUrl = "/api/stream/" + camEncoded + "/live?annotated=1" +
+                    (offset > 0 ? "&offset=" + offset : "");
+      html += '<div class="modal-video-wrap">' +
+              '<img id="modalLive" src="' + esc(liveUrl) + '" alt="Live stream">' +
+              '</div>';
+    } else {
+      var historyUrl = "/api/stream/" + camEncoded +
+                       "/history?t=" + (createdMs / 1000) + "&annotated=1";
+      html += '<div class="modal-video-wrap">' +
+              '<video id="modalVideo" controls preload="auto">' +
+              '<source src="' + esc(historyUrl) + '" type="video/mp4">' +
+              '</video></div>';
+    }
 
     html += '<div class="modal-details">';
     html += buildDetail("ID", "#" + alert.id);
@@ -898,7 +1228,7 @@ td {
     html += buildDetail("Status", (alert.status || "").toUpperCase());
     html += buildDetail("Created", fmtDateTime(alert.created_at));
     html += buildDetail("Last updated", fmtDateTime(alert.updated_at));
-    html += buildDetail("Acked by", alert.acknowledged_by || "—");
+    html += buildDetail("Acked by", alert.acknowledged_by || "\u2014");
     html += buildDetail("Acked at", fmtDateTime(alert.acknowledged_at));
     html += buildDetail("Closed at", fmtDateTime(alert.closed_at));
     html += buildDetail("Duration", fmtDuration(alert.created_at, alert.closed_at));
@@ -909,31 +1239,40 @@ td {
 
     modalBody.innerHTML = html;
 
-    try {
-      var logsRes = await fetch("/api/alerts/" + alert.id + "/logs");
-      var logs = await logsRes.json();
-      if (logs.length) {
-        var logsHtml = '<div class="modal-logs-title">Audit Log</div><div class="modal-logs">';
-        logs.forEach(function(log) {
-          var details = "";
-          if (log.details) {
-            try { details = JSON.stringify(JSON.parse(log.details)); } catch(e) { details = log.details; }
-          }
-          logsHtml += '<div class="modal-log-entry">' +
-            '<span class="modal-log-action">' + esc(log.action) + '</span>' +
-            '<span class="modal-log-time">' + esc(fmtDateTime(log.timestamp)) + '</span>' +
-            (details ? '<span style="color:var(--text-dim);font-size:0.6rem;">' + esc(details) + '</span>' : '') +
-            '</div>';
-        });
-        logsHtml += '</div>';
-        modalBody.insertAdjacentHTML("beforeend", logsHtml);
-      }
-    } catch(e) {}
+    var logs = alert.logs || [];
+    if (!logs.length) {
+      try {
+        var logsRes = await fetch("/api/alerts/" + alert.id + "/logs");
+        logs = await logsRes.json();
+      } catch(e) {}
+    }
+    if (logs.length) {
+      var logsHtml = '<div class="modal-logs-title">Audit Log</div><div class="modal-logs">';
+      logs.forEach(function(log) {
+        var details = "";
+        if (log.details) {
+          try { details = JSON.stringify(JSON.parse(log.details)); } catch(e) { details = log.details; }
+        }
+        logsHtml += '<div class="modal-log-entry">' +
+          '<span class="modal-log-action">' + esc(log.action) + '</span>' +
+          '<span class="modal-log-time">' + esc(fmtDateTime(log.timestamp)) + '</span>' +
+          (details ? '<span style="color:var(--text-dim);font-size:0.6rem;">' + esc(details) + '</span>' : '') +
+          '</div>';
+      });
+      logsHtml += '</div>';
+      modalBody.insertAdjacentHTML("beforeend", logsHtml);
+    }
 
     var vid = document.getElementById("modalVideo");
     if (vid) {
       vid.addEventListener("error", function() {
         vid.parentElement.innerHTML = '<div class="modal-no-video">No video available for this time range</div>';
+      });
+    }
+    var liveImg = document.getElementById("modalLive");
+    if (liveImg) {
+      liveImg.addEventListener("error", function() {
+        liveImg.parentElement.innerHTML = '<div class="modal-no-video">Live stream unavailable</div>';
       });
     }
 
@@ -943,7 +1282,7 @@ td {
   function buildDetail(label, value) {
     return '<div class="modal-detail"><span class="modal-detail-label">' +
            esc(label) + '</span><span class="modal-detail-value">' +
-           esc(value || "—") + '</span></div>';
+           esc(value || "\u2014") + '</span></div>';
   }
 
   // ── Init ───────────────────────────────────────────────────────

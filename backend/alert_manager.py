@@ -96,12 +96,14 @@ class AlertManager:
                 last = self._last_seen.get(key, 0)
 
             if (now - last) >= self._grace:
+                was_acked = alert["status"] == "acknowledged"
                 self._db.close_alert(alert["id"])
                 with self._lock:
                     self._last_seen.pop(key, None)
                 if self._mqtt:
-                    alert["status"] = "closed"
-                    self._publish("alert_closed", alert)
+                    alert["status"] = "resolved" if was_acked else "closed"
+                    event = "alert_resolved" if was_acked else "alert_closed"
+                    self._publish(event, alert)
 
                 # Turn off LED+buzzer if no active severe/high alerts remain
                 if self._esp and alert.get("severity") in ("severe", "high"):

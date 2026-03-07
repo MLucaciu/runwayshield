@@ -333,6 +333,22 @@ def acknowledge_alert(alert_id):
     return jsonify(result)
 
 
+@app.route("/api/alerts/delete", methods=["POST"])
+def delete_alerts():
+    if not _alerts_db:
+        return jsonify({"error": "Alerts not initialised"}), 503
+    data = request.get_json(force=True)
+    ids = data.get("ids")
+    delete_all = data.get("all", False)
+    if delete_all:
+        count = _alerts_db.delete_all_reports()
+    elif ids and isinstance(ids, list):
+        count = _alerts_db.delete_by_ids([int(i) for i in ids])
+    else:
+        return jsonify({"error": "Provide 'ids' array or 'all': true"}), 400
+    return jsonify({"deleted": count})
+
+
 @app.route("/api/alerts/<int:alert_id>/logs")
 def get_alert_logs(alert_id):
     if not _alerts_db:
