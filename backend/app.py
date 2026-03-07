@@ -163,6 +163,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/reports")
+def reports_page():
+    return render_template("reports.html")
+
+
 @app.route("/test-delay")
 def test_delay():
     return """<!DOCTYPE html>
@@ -261,6 +266,21 @@ def alerts_history():
         return jsonify([])
     return jsonify(_alerts_db.query_history(
         limit=request.args.get("limit", 100, type=int),
+        camera_id=request.args.get("camera_id"),
+        zone_id=request.args.get("zone_id"),
+        object_type=request.args.get("object_type"),
+        severity=request.args.get("severity"),
+        from_ts=request.args.get("from"),
+        to_ts=request.args.get("to"),
+    ))
+
+
+@app.route("/api/alerts/reports")
+def alerts_reports():
+    if not _alerts_db:
+        return jsonify([])
+    return jsonify(_alerts_db.query_reports(
+        limit=request.args.get("limit", 500, type=int),
         camera_id=request.args.get("camera_id"),
         zone_id=request.args.get("zone_id"),
         object_type=request.args.get("object_type"),

@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reports — Runway Shield</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-app: #0a0e17;
+  --bg-panel: #101520;
+  --bg-header: rgba(12, 18, 30, 0.94);
+  --bg-row: rgba(18, 26, 42, 0.4);
+  --bg-row-hover: rgba(24, 36, 58, 0.7);
+  --bg-row-alt: rgba(14, 22, 36, 0.35);
+  --bg-ctrl-btn: rgba(24, 34, 56, 0.6);
+  --bg-ctrl-btn-hover: rgba(30, 46, 72, 0.9);
+  --bg-modal-overlay: rgba(0, 0, 0, 0.75);
+  --bg-modal: #121a2a;
+  --bg-scrollbar-thumb: rgba(100, 130, 170, 0.18);
+  --bg-scrollbar-thumb-hover: rgba(100, 130, 170, 0.32);
+  --border-accent: rgba(56, 189, 210, 0.14);
+  --border-accent-subtle: rgba(56, 189, 210, 0.07);
+  --border-ctrl: rgba(50, 66, 96, 0.6);
+  --text-primary: #e8edf5;
+  --text-secondary: #8b9bc0;
+  --text-muted: #5a6a8a;
+  --text-dim: #3d4d6a;
+  --accent: #38bdd2;
+  --accent-light: #5dd8ec;
+  --accent-glow: rgba(56, 189, 210, 0.35);
+  --accent-bg: rgba(56, 189, 210, 0.08);
+  --sev-red: #f04858;
+  --sev-amber: #f0a030;
+  --sev-blue: #38bdd2;
+  --sev-green: #34d399;
+  --status-green: #34d399;
+  --font-ui: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 1px rgba(56,189,210,0.04);
+}
+
+[data-theme="light"] {
+  --bg-app: #f0f3f8;
+  --bg-panel: #ffffff;
+  --bg-header: rgba(255,255,255,0.94);
+  --bg-row: rgba(240,243,248,0.6);
+  --bg-row-hover: rgba(224,229,238,0.8);
+  --bg-row-alt: rgba(248,249,252,0.6);
+  --bg-ctrl-btn: rgba(240,243,248,0.9);
+  --bg-ctrl-btn-hover: #e0e5ee;
+  --bg-modal-overlay: rgba(0, 0, 0, 0.5);
+  --bg-modal: #ffffff;
+  --bg-scrollbar-thumb: rgba(80,100,140,0.18);
+  --bg-scrollbar-thumb-hover: rgba(80,100,140,0.32);
+  --border-accent: rgba(20,148,168,0.16);
+  --border-accent-subtle: rgba(20,148,168,0.10);
+  --border-ctrl: #c8d0dd;
+  --text-primary: #1a2236;
+  --text-secondary: #4a5670;
+  --text-muted: #6b7a96;
+  --text-dim: #96a3b8;
+  --accent: #1494a8;
+  --accent-light: #0e7a8c;
+  --accent-glow: rgba(20,148,168,0.2);
+  --accent-bg: rgba(20,148,168,0.06);
+  --sev-red: #dc3545;
+  --sev-amber: #d4880a;
+  --sev-blue: #1494a8;
+  --sev-green: #12a366;
+  --status-green: #12a366;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-app);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1.15rem;
+  background: var(--bg-header);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border-accent);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  flex-shrink: 0;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.logo-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  transition: all 0.18s ease;
+}
+
+.back-link:hover {
+  background: var(--bg-ctrl-btn-hover);
+  color: var(--text-primary);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+  color: var(--text-secondary);
+}
+
+.theme-toggle:hover {
+  background: var(--bg-ctrl-btn-hover);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  transform: scale(1.08);
+}
+
+.theme-toggle svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.theme-toggle:hover svg { transform: rotate(25deg); }
+
+.content {
+  flex: 1;
+  padding: 1.25rem 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.page-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.page-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.page-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent-light);
+  background: var(--accent-bg);
+  padding: 0.2rem 0.7rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-accent);
+}
+
+.filters-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.18s;
+  outline: none;
+}
+
+.filter-select:hover, .filter-select:focus {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.filter-select option {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+}
+
+.table-wrap {
+  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-accent-subtle);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.74rem;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-panel);
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-accent);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+thead th:hover { color: var(--accent); }
+
+thead th.sorted { color: var(--accent-light); }
+
+thead th .sort-arrow {
+  display: inline-block;
+  margin-left: 0.3em;
+  font-size: 0.55rem;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+thead th.sorted .sort-arrow { opacity: 1; }
+
+tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+tbody tr:nth-child(odd) { background: var(--bg-row); }
+tbody tr:nth-child(even) { background: var(--bg-row-alt); }
+tbody tr:hover { background: var(--bg-row-hover); }
+
+td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-accent-subtle);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.sev-badge {
+  display: inline-block;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  padding: 0.14rem 0.5rem;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+}
+
+.sev-severe { color: var(--sev-red); background: rgba(240,72,88,0.12); border: 1px solid rgba(240,72,88,0.2); }
+.sev-medium { color: var(--sev-amber); background: rgba(240,160,48,0.12); border: 1px solid rgba(240,160,48,0.2); }
+.sev-low { color: var(--sev-blue); background: rgba(56,189,210,0.12); border: 1px solid rgba(56,189,210,0.2); }
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+.st-acknowledged { color: var(--sev-amber); }
+.st-closed { color: var(--text-dim); }
+.st-active { color: var(--sev-red); }
+
+.td-mono {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.td-cap { text-transform: capitalize; font-weight: 600; }
+
+.empty-state {
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* ── Modal ────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--bg-modal-overlay);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s, visibility 0.25s;
+}
+
+.modal-overlay.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal {
+  background: var(--bg-modal);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-accent);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(56,189,210,0.06);
+  width: 90%;
+  max-width: 900px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.96) translateY(8px);
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.modal-overlay.open .modal {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--border-accent-subtle);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-ctrl);
+  background: var(--bg-ctrl-btn);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: all 0.18s;
+}
+
+.modal-close:hover {
+  background: rgba(240,72,88,0.15);
+  border-color: var(--sev-red);
+  color: var(--sev-red);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modal-video-wrap {
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16/9;
+  position: relative;
+}
+
+.modal-video-wrap video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.modal-no-video {
+  width: 100%;
+  aspect-ratio: 16/9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.modal-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.modal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-row);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-accent-subtle);
+}
+
+.modal-detail-label {
+  font-size: 0.56rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.modal-detail-value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.modal-logs-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-top: 0.25rem;
+}
+
+.modal-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.modal-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border-accent-subtle);
+}
+
+.modal-log-action {
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-light);
+  min-width: 90px;
+}
+
+.modal-log-time {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-scrollbar-thumb-hover); }
+
+@media (max-width: 768px) {
+  .content { padding: 0.75rem; }
+  .modal { width: 96%; max-height: 95vh; }
+  .modal-details { grid-template-columns: repeat(2, 1fr); }
+  table { font-size: 0.68rem; }
+  td, thead th { padding: 0.45rem 0.55rem; }
+}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="24" height="24">
+          <defs>
+            <clipPath id="shield-left"><rect x="0" y="0" width="32" height="64"/></clipPath>
+            <clipPath id="shield-right"><rect x="32" y="0" width="32" height="64"/></clipPath>
+            <linearGradient id="shield-grad" x1="0" y1="0" x2="0.3" y2="1">
+              <stop offset="0%" stop-color="#5dd8ec"/>
+              <stop offset="100%" stop-color="#1494a8"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="url(#shield-grad)" clip-path="url(#shield-left)"/>
+          <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="white" clip-path="url(#shield-right)"/>
+          <path d="M32 4 L56 16 V34 C56 48 44 58 32 62 C20 58 8 48 8 34 V16 Z" fill="none" stroke="#5dd8ec" stroke-width="1.5"/>
+        </svg>
+        <span class="logo-text">Runway Shield</span>
+      </div>
+      <div class="header-right">
+        <a href="/" class="back-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Dashboard
+        </a>
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">
+          <svg id="sunIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <svg id="moonIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="page-title-row">
+        <h1 class="page-title">Reports</h1>
+        <span class="page-count" id="totalCount">0 reports</span>
+      </div>
+
+      <div class="filters-row">
+        <select class="filter-select" id="filterSeverity">
+          <option value="">All severities</option>
+          <option value="severe">Severe</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <select class="filter-select" id="filterStatus">
+          <option value="">All statuses</option>
+          <option value="acknowledged">Acknowledged</option>
+          <option value="closed">Closed</option>
+        </select>
+        <select class="filter-select" id="filterCamera">
+          <option value="">All cameras</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-col="id">ID <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="severity">Severity <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="object_type">Object <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="zone_id">Zone <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="camera_id">Camera <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="status">Status <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="created_at" class="sorted">Created <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="acknowledged_by">Acked by <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="acknowledged_at">Acked at <span class="sort-arrow">&#9660;</span></th>
+                <th data-col="duration">Duration <span class="sort-arrow">&#9660;</span></th>
+              </tr>
+            </thead>
+            <tbody id="reportsTbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state" id="emptyState" style="display:none;">No reports yet. Acknowledged alerts will appear here.</div>
+      </div>
+    </div>
+
+    <!-- Video modal -->
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal">
+        <div class="modal-header">
+          <span class="modal-title" id="modalTitle">Alert Details</span>
+          <button class="modal-close" id="modalClose">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+(function() {
+  "use strict";
+
+  let reports = [];
+  let sortCol = "created_at";
+  let sortAsc = false;
+
+  const tbody = document.getElementById("reportsTbody");
+  const emptyState = document.getElementById("emptyState");
+  const totalCount = document.getElementById("totalCount");
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalClose = document.getElementById("modalClose");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalBody = document.getElementById("modalBody");
+  const filterSeverity = document.getElementById("filterSeverity");
+  const filterStatus = document.getElementById("filterStatus");
+  const filterCamera = document.getElementById("filterCamera");
+
+  const SEV_ORDER = { severe: 0, medium: 1, low: 2 };
+
+  // ── Theme ──────────────────────────────────────────────────────
+  let theme = localStorage.getItem("rws-theme") || "dark";
+  document.documentElement.setAttribute("data-theme", theme);
+  updateThemeIcon();
+
+  function updateThemeIcon() {
+    document.getElementById("sunIcon").style.display = theme === "dark" ? "" : "none";
+    document.getElementById("moonIcon").style.display = theme === "dark" ? "none" : "";
+  }
+
+  document.getElementById("themeToggle").addEventListener("click", function() {
+    theme = theme === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("rws-theme", theme);
+    updateThemeIcon();
+  });
+
+  // ── Helpers ────────────────────────────────────────────────────
+  function esc(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function fmtDateTime(iso) {
+    if (!iso) return "—";
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) +
+             " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    } catch(e) { return iso; }
+  }
+
+  function fmtDuration(created, closed) {
+    if (!created) return "—";
+    var start = new Date(created);
+    var end = closed ? new Date(closed) : new Date();
+    var diff = Math.max(0, Math.floor((end - start) / 1000));
+    if (diff < 60) return diff + "s";
+    if (diff < 3600) return Math.floor(diff / 60) + "m " + (diff % 60) + "s";
+    return Math.floor(diff / 3600) + "h " + Math.floor((diff % 3600) / 60) + "m";
+  }
+
+  // ── Data ───────────────────────────────────────────────────────
+  async function loadReports() {
+    try {
+      var res = await fetch("/api/alerts/reports?limit=500");
+      reports = await res.json();
+      populateCameraFilter();
+      render();
+    } catch(e) {
+      console.error("Failed to load reports", e);
+    }
+  }
+
+  function populateCameraFilter() {
+    var cams = new Set();
+    reports.forEach(function(r) { if (r.camera_id) cams.add(r.camera_id); });
+    var current = filterCamera.value;
+    filterCamera.innerHTML = '<option value="">All cameras</option>';
+    cams.forEach(function(c) {
+      var opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = c;
+      filterCamera.appendChild(opt);
+    });
+    filterCamera.value = current;
+  }
+
+  function getFiltered() {
+    var sev = filterSeverity.value;
+    var st = filterStatus.value;
+    var cam = filterCamera.value;
+    return reports.filter(function(r) {
+      if (sev && r.severity !== sev) return false;
+      if (st && r.status !== st) return false;
+      if (cam && r.camera_id !== cam) return false;
+      return true;
+    });
+  }
+
+  function getSorted(data) {
+    var col = sortCol;
+    var asc = sortAsc;
+    return data.slice().sort(function(a, b) {
+      var va = a[col], vb = b[col];
+      if (col === "severity") {
+        va = SEV_ORDER[va] !== undefined ? SEV_ORDER[va] : 9;
+        vb = SEV_ORDER[vb] !== undefined ? SEV_ORDER[vb] : 9;
+      }
+      if (col === "duration") {
+        var sa = new Date(a.created_at), ea = a.closed_at ? new Date(a.closed_at) : new Date();
+        var sb = new Date(b.created_at), eb = b.closed_at ? new Date(b.closed_at) : new Date();
+        va = ea - sa;
+        vb = eb - sb;
+      }
+      if (va == null) va = "";
+      if (vb == null) vb = "";
+      if (typeof va === "string") {
+        var cmp = va.localeCompare(vb);
+        return asc ? cmp : -cmp;
+      }
+      return asc ? va - vb : vb - va;
+    });
+  }
+
+  // ── Render ─────────────────────────────────────────────────────
+  function render() {
+    var filtered = getFiltered();
+    var sorted = getSorted(filtered);
+
+    totalCount.textContent = sorted.length + " report" + (sorted.length !== 1 ? "s" : "");
+
+    document.querySelectorAll("thead th").forEach(function(th) {
+      th.classList.toggle("sorted", th.dataset.col === sortCol);
+      var arrow = th.querySelector(".sort-arrow");
+      if (arrow) arrow.innerHTML = (th.dataset.col === sortCol && sortAsc) ? "&#9650;" : "&#9660;";
+    });
+
+    if (!sorted.length) {
+      tbody.innerHTML = "";
+      emptyState.style.display = "";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    tbody.innerHTML = "";
+    sorted.forEach(function(r) {
+      var tr = document.createElement("tr");
+      tr.addEventListener("click", function() { openModal(r); });
+
+      tr.innerHTML =
+        '<td class="td-mono">' + esc(String(r.id)) + '</td>' +
+        '<td><span class="sev-badge sev-' + esc(r.severity) + '">' + esc((r.severity || "").toUpperCase()) + '</span></td>' +
+        '<td class="td-cap">' + esc(r.object_type) + '</td>' +
+        '<td>' + esc(r.zone_id) + '</td>' +
+        '<td class="td-mono">' + esc(r.camera_id) + '</td>' +
+        '<td><span class="status-badge st-' + esc(r.status) + '">' + esc((r.status || "").toUpperCase()) + '</span></td>' +
+        '<td class="td-mono">' + esc(fmtDateTime(r.created_at)) + '</td>' +
+        '<td>' + esc(r.acknowledged_by || "—") + '</td>' +
+        '<td class="td-mono">' + esc(fmtDateTime(r.acknowledged_at)) + '</td>' +
+        '<td class="td-mono">' + esc(fmtDuration(r.created_at, r.closed_at)) + '</td>';
+
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Sorting ────────────────────────────────────────────────────
+  document.querySelectorAll("thead th").forEach(function(th) {
+    th.addEventListener("click", function() {
+      var col = th.dataset.col;
+      if (!col) return;
+      if (sortCol === col) { sortAsc = !sortAsc; }
+      else { sortCol = col; sortAsc = false; }
+      render();
+    });
+  });
+
+  // ── Filters ────────────────────────────────────────────────────
+  filterSeverity.addEventListener("change", render);
+  filterStatus.addEventListener("change", render);
+  filterCamera.addEventListener("change", render);
+
+  // ── Modal ──────────────────────────────────────────────────────
+  function closeModal() {
+    modalOverlay.classList.remove("open");
+    modalBody.innerHTML = "";
+  }
+
+  modalClose.addEventListener("click", closeModal);
+  modalOverlay.addEventListener("click", function(e) {
+    if (e.target === modalOverlay) closeModal();
+  });
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Escape") closeModal();
+  });
+
+  async function openModal(alert) {
+    modalTitle.textContent = (alert.object_type || "Alert") + " in " + (alert.zone_id || "Unknown Zone") + " — #" + alert.id;
+
+    var html = '';
+
+    var videoUrl = "/api/stream/" + encodeURIComponent(alert.camera_id) +
+                   "/history?t=" + (new Date(alert.created_at).getTime() / 1000) +
+                   "&annotated=1";
+
+    html += '<div class="modal-video-wrap">' +
+            '<video id="modalVideo" controls preload="auto">' +
+            '<source src="' + esc(videoUrl) + '" type="video/mp4">' +
+            '</video></div>';
+
+    html += '<div class="modal-details">';
+    html += buildDetail("ID", "#" + alert.id);
+    html += buildDetail("Severity", (alert.severity || "").toUpperCase());
+    html += buildDetail("Object", alert.object_type);
+    html += buildDetail("Zone", alert.zone_id);
+    html += buildDetail("Camera", alert.camera_id);
+    html += buildDetail("Status", (alert.status || "").toUpperCase());
+    html += buildDetail("Created", fmtDateTime(alert.created_at));
+    html += buildDetail("Last updated", fmtDateTime(alert.updated_at));
+    html += buildDetail("Acked by", alert.acknowledged_by || "—");
+    html += buildDetail("Acked at", fmtDateTime(alert.acknowledged_at));
+    html += buildDetail("Closed at", fmtDateTime(alert.closed_at));
+    html += buildDetail("Duration", fmtDuration(alert.created_at, alert.closed_at));
+    if (alert.gps_lat != null && alert.gps_lng != null) {
+      html += buildDetail("GPS", alert.gps_lat.toFixed(5) + ", " + alert.gps_lng.toFixed(5));
+    }
+    html += '</div>';
+
+    modalBody.innerHTML = html;
+
+    try {
+      var logsRes = await fetch("/api/alerts/" + alert.id + "/logs");
+      var logs = await logsRes.json();
+      if (logs.length) {
+        var logsHtml = '<div class="modal-logs-title">Audit Log</div><div class="modal-logs">';
+        logs.forEach(function(log) {
+          var details = "";
+          if (log.details) {
+            try { details = JSON.stringify(JSON.parse(log.details)); } catch(e) { details = log.details; }
+          }
+          logsHtml += '<div class="modal-log-entry">' +
+            '<span class="modal-log-action">' + esc(log.action) + '</span>' +
+            '<span class="modal-log-time">' + esc(fmtDateTime(log.timestamp)) + '</span>' +
+            (details ? '<span style="color:var(--text-dim);font-size:0.6rem;">' + esc(details) + '</span>' : '') +
+            '</div>';
+        });
+        logsHtml += '</div>';
+        modalBody.insertAdjacentHTML("beforeend", logsHtml);
+      }
+    } catch(e) {}
+
+    var vid = document.getElementById("modalVideo");
+    if (vid) {
+      vid.addEventListener("error", function() {
+        vid.parentElement.innerHTML = '<div class="modal-no-video">No video available for this time range</div>';
+      });
+    }
+
+    modalOverlay.classList.add("open");
+  }
+
+  function buildDetail(label, value) {
+    return '<div class="modal-detail"><span class="modal-detail-label">' +
+           esc(label) + '</span><span class="modal-detail-value">' +
+           esc(value || "—") + '</span></div>';
+  }
+
+  // ── Init ───────────────────────────────────────────────────────
+  loadReports();
+  setInterval(loadReports, 15000);
+
+})();
+  </script>
+</body>
+</html>

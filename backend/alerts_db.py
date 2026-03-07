@@ -23,10 +23,14 @@ class AlertsDB:
         return self._local.conn
 
     def clear_all(self):
-        """Delete all alerts and alert_logs. Used at startup for a clean slate."""
+        """Close stale active alerts from a previous run. Acknowledged/closed alerts are preserved as reports."""
         conn = self._conn()
-        conn.execute("DELETE FROM alert_logs")
-        conn.execute("DELETE FROM alerts")
+        now = self._now_iso()
+        conn.execute(
+            "UPDATE alerts SET status = 'closed', closed_at = ?, updated_at = ? "
+            "WHERE status = 'active'",
+            (now, now),
+        )
         conn.commit()
 
     def _init_schema(self):
@@ -185,6 +189,34 @@ class AlertsDB:
                       object_type=None, severity=None, from_ts=None, to_ts=None):
         conn = self._conn()
         sql = "SELECT * FROM alerts WHERE 1=1"
+        params = []
+        if camera_id:
+            sql += " AND camera_id = ?"
+            params.append(camera_id)
+        if zone_id:
+            sql += " AND zone_id = ?"
+            params.append(zone_id)
+        if object_type:
+            sql += " AND object_type = ?"
+            params.append(object_type)
+        if severity:
+            sql += " AND severity = ?"
+            params.append(severity)
+        if from_ts:
+            sql += " AND created_at >= ?"
+            params.append(from_ts)
+        if to_ts:
+            sql += " AND created_at <= ?"
+            params.append(to_ts)
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        return [dict(row) for row in conn.execute(sql, params).fetchall()]
+
+    def query_reports(self, limit=500, camera_id=None, zone_id=None,
+                      object_type=None, severity=None, from_ts=None, to_ts=None):
+        """Return acknowledged/closed alerts for the reports page."""
+        conn = self._conn()
+        sql = "SELECT * FROM alerts WHERE status IN ('acknowledged', 'closed')"
         params = []
         if camera_id:
             sql += " AND camera_id = ?"
