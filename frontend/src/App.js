@@ -334,11 +334,21 @@ export default function App() {
             <div className="sidebar-stats">
               <div className="sidebar-stat-row">
                 <span className="stat-label">Temperature</span>
-                <span className="stat-value">{env ? `${env.temperature}${env.temperature_unit}` : "--"}</span>
+                <span className="stat-value">{env?.temperature != null ? `${env.temperature}${env.temperature_unit}` : "--"}</span>
               </div>
               <div className="sidebar-stat-row">
-                <span className="stat-label">Wind speed</span>
-                <span className="stat-value">{env ? `${env.wind_speed} ${env.wind_unit}` : "--"}</span>
+                <span className="stat-label">Humidity</span>
+                <span className="stat-value">{env?.humidity != null ? `${env.humidity}${env.humidity_unit}` : "--"}</span>
+              </div>
+              <div className="sidebar-stat-row">
+                <span className="stat-label">Pressure</span>
+                <span className="stat-value">{env?.pressure != null ? `${env.pressure} ${env.pressure_unit}` : "--"}</span>
+              </div>
+              <div className="sidebar-stat-row">
+                <span className="stat-label">Rain sensor</span>
+                <span className={`stat-value ${env?.rain_detected ? "stat-alert" : ""}`}>
+                  {env?.rain_detected != null ? (env.rain_detected ? "Rain detected" : "Clear") : "--"}
+                </span>
               </div>
             </div>
           </div>
@@ -356,7 +366,9 @@ export default function App() {
               </div>
               <div className="sidebar-stat-row">
                 <span className="stat-label">Surface condition</span>
-                <span className="stat-value">{runway?.surface_condition ?? "--"}</span>
+                <span className={`stat-value ${runway?.surface_condition !== "Dry" ? "stat-alert" : ""}`}>
+                  {runway?.surface_condition ?? "--"}
+                </span>
               </div>
             </div>
           </div>
@@ -612,6 +624,17 @@ export default function App() {
               <div className="panel-header">
                 <span className="panel-title">Zone Alerts</span>
                 <span className="panel-count">{zoneAlerts.length}</span>
+                {zoneAlerts.some((a) => a.status === "active") && (
+                  <button
+                    className="ack-first-btn"
+                    onClick={() => {
+                      const first = zoneAlerts.find((a) => a.status === "active");
+                      if (first) acknowledgeAlert(first.id);
+                    }}
+                  >
+                    Acknowledge Alert
+                  </button>
+                )}
               </div>
               <div className="bottom-alerts-list">
                 {zoneAlerts.length === 0 && (

@@ -37,13 +37,12 @@ class AlertManager:
     Thread-safe: called from each camera's detection thread.
     """
 
-    def __init__(self, alerts_db, mqtt_client=None, grace_seconds=3.0):
+    def __init__(self, alerts_db, mqtt_client=None, esp_sensor=None, grace_seconds=3.0):
         self._db = alerts_db
         self._mqtt = mqtt_client
+        self._esp = esp_sensor
         self._grace = grace_seconds
         self._lock = threading.Lock()
-        # Tracks the last time each (camera_id, zone_id, object_type) was seen.
-        # Used to implement the grace period before closing.
         self._last_seen: dict[tuple, float] = {}
 
     def process_frame(self, camera_id, violations):
@@ -74,8 +73,12 @@ class AlertManager:
                 gps_lng=v["gps_lng"],
             )
 
-            if is_new and self._mqtt:
-                self._publish("alert_new", alert)
+            if is_new:
+                if self._mqtt:
+                    self._publish("alert_new", alert)
+                if severity == "severe" and self._esp:
+                    self._esp.set_led(True)
+                    self._esp.set_buzzer(True)
 
         self._close_stale(camera_id, seen_keys, now)
 

@@ -17,6 +17,7 @@ from mqtt_client import MQTTNotificationClient
 from alerts_db import AlertsDB
 from zone_checker import ZoneChecker
 from alert_manager import AlertManager
+from esp_sensor_client import ESPSensorClient
 
 app = Flask(__name__)
 CORS(app)
@@ -51,6 +52,7 @@ _alerts_db = None
 _mqtt_client = None
 _zone_checker = None
 _alert_manager = None
+_esp_sensor = None
 
 
 def _shutdown():
@@ -59,13 +61,15 @@ def _shutdown():
         cam.stop()
     if _mqtt_client:
         _mqtt_client.stop()
+    if _esp_sensor:
+        _esp_sensor.stop()
 
 atexit.register(_shutdown)
 
 
 def start_cameras():
     global _cameras_started, _detections_db, _notifications_db, _mqtt_client
-    global _alerts_db, _zone_checker, _alert_manager
+    global _alerts_db, _zone_checker, _alert_manager, _esp_sensor
     if _cameras_started:
         return
     _cameras_started = True
@@ -86,9 +90,16 @@ def start_cameras():
     )
     _mqtt_client.start()
 
+    # Start ESP sensor MQTT client
+    _esp_sensor = ESPSensorClient(
+        broker_host=MQTT_BROKER_HOST,
+        broker_port=MQTT_BROKER_PORT,
+    )
+    _esp_sensor.start()
+
     # Zone checking and alert management
     _zone_checker = ZoneChecker()
-    _alert_manager = AlertManager(_alerts_db, mqtt_client=_mqtt_client)
+    _alert_manager = AlertManager(_alerts_db, mqtt_client=_mqtt_client, esp_sensor=_esp_sensor)
 
     try:
         _test_detector = Detector(YOLO_MODEL)
@@ -279,6 +290,15 @@ def acknowledge_alert(alert_id):
     result = _alert_manager.acknowledge(alert_id, username)
     if not result:
         return jsonify({"error": "Alert not found or already acknowledged/closed"}), 404
+
+    # If no more active severe alerts remain, turn off LED + buzzer
+    if _esp_sensor and _alerts_db:
+        remaining = [a for a in _alerts_db.query_live()
+                     if a["status"] == "active" and a["severity"] == "severe"]
+        if not remaining:
+            _esp_sensor.set_led(False)
+            _esp_sensor.set_buzzer(False)
+
     return jsonify(result)
 
 
@@ -300,25 +320,48 @@ def get_zones():
 
 
 # ---------------------------------------------------------------------------
-# Airport info — placeholder environmental & runway data
-# TODO: integrate real weather API and runway management system
+# Airport info — live sensor data from ESP32-S3 via MQTT
 # ---------------------------------------------------------------------------
+
+def _surface_condition(rain_detected, humidity):
+    if rain_detected:
+        return "Wet — Rain detected"
+    if humidity is not None and humidity > 85:
+        return "Damp"
+    return "Dry"
+
 
 @app.route("/api/airport-info")
 def airport_info():
+    readings = _esp_sensor.get_readings() if _esp_sensor else {}
+
+    temp = readings.get("bme_temperature", readings.get("aht_temperature"))
+    humidity = readings.get("bme_humidity", readings.get("aht_humidity"))
+    pressure = readings.get("bme_pressure")
+    rain_raw = readings.get("rain_sensor")
+    rain_detected = rain_raw == "ON" if rain_raw is not None else None
+
+    live_count = len(_alerts_db.query_live()) if _alerts_db else 0
+    hist_count = len(_alerts_db.query_history(limit=1000,
+        from_ts=(datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    )) if _alerts_db else 0
+
     return jsonify({
         "name": "Aeroportul Internațional Oradea",
         "code": "OMR",
         "environmental": {
-            "temperature": 20,
-            "temperature_unit": "C",
-            "wind_speed": 7,
-            "wind_unit": "km/h",
+            "temperature": round(temp, 1) if temp is not None else None,
+            "temperature_unit": "°C",
+            "humidity": round(humidity, 1) if humidity is not None else None,
+            "humidity_unit": "%",
+            "pressure": round(pressure, 1) if pressure is not None else None,
+            "pressure_unit": "hPa",
+            "rain_detected": rain_detected,
         },
         "runway_status": {
-            "live_incidents": 3,
-            "past_24hr": 7,
-            "surface_condition": "Dry",
+            "live_incidents": live_count,
+            "past_24hr": hist_count,
+            "surface_condition": _surface_condition(rain_detected, humidity),
         },
     })
 
