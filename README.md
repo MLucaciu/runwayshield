@@ -8,7 +8,14 @@ Runway Shield uses computer vision and object tracking to automatically detect b
 
 ## Demo
 
-<video src="docs/FINAL.mov" width="100%" controls></video>
+### Video presentation
+
+
+https://github.com/user-attachments/assets/48160d73-a53c-441e-afce-1aff0de1b603
+
+
+
+### Screenshot
 
 ![Dashboard Screenshot](docs/img.png)
 
