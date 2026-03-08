@@ -6,6 +6,17 @@ Runway Shield uses computer vision and object tracking to automatically detect b
 
 ---
 
+## Demo
+
+<video src="docs/FINAL.mov" width="100%" controls></video>
+
+![Dashboard Screenshot](docs/img.png)
+
+Built at **HackTech Oradea 2026** — Challenge: *Automatic Hazard Detection*
+`#MLSpecialists` `#ComputerVision` `#AerospaceEngineers`
+
+---
+
 ## The Problem
 
 Runway incursions — birds, stray animals, forgotten equipment — cause catastrophic accidents every year. Today, airports rely heavily on human eyes to patrol runways. This is slow, expensive, and error-prone, especially at night or in poor visibility.
@@ -24,56 +35,71 @@ Runway incursions — birds, stray animals, forgotten equipment — cause catast
 - **Live WebSocket dashboard** — detections and alerts pushed to a React dashboard in real time
 - **MQTT integration** — publish alerts to an IoT message broker to trigger physical actuators
 - **ESP32 sensor integration** — connect hardware sensor nodes for additional environmental data
-- **Camera emulator** — replay pre-recorded `.mp4` files as live MJPEG streams for testing without physical cameras
+- **Camera emulator** — live and replay pre-recorded `.mp4` files as live MJPEG streams for testing without physical cameras
 - **Persistent history** — detections, alerts, and notifications stored in SQLite
 
 ---
 
 ## Technical Stack
 
-| Layer | Technology |
-|---|---|
-| Object Detection | [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (yolo11n-seg, yolo26 variants) |
-| Object Tracking | ByteTrack (via Ultralytics) |
-| Backend API | Python 3.11, Flask 3.1, Flask-SocketIO |
-| Production Server | Gunicorn (gthread, 1 worker, 16 threads) |
-| Camera Ingestion | OpenCV (`cv2`), MJPEG streams |
-| Messaging | MQTT (Paho), WebSockets (Socket.IO) |
-| Hardware | ESP32 sensor nodes |
-| Frontend Dashboard | React 19, WebSockets |
-| GPS Projection | Custom homography-based pixel → GPS mapping |
-| Camera Emulator | Python + OpenCV MJPEG server |
-| Database | SQLite (via Python `sqlite3`) |
+| Layer | Technology                                                                                               |
+|---|----------------------------------------------------------------------------------------------------------|
+| Object Detection | [Ultralytics YOLO11 / YOLO26](https://github.com/ultralytics/ultralytics) (yolo11n-seg, yolo26 variants) |
+| Object Tracking | ByteTrack (via Ultralytics)                                                                              |
+| Backend API | Python 3.11, Flask 3.1, Flask-SocketIO                                                                   |
+| Production Server | Gunicorn (gthread, 1 worker, 16 threads)                                                                 |
+| Camera Ingestion | OpenCV (`cv2`), MJPEG streams                                                                            |
+| Messaging | MQTT (Paho), WebSockets (Socket.IO)                                                                      |
+| Hardware | ESP32 sensor nodes                                                                                       |
+| Frontend Dashboard | React 19, WebSockets                                                                                     |
+| GPS Projection | Custom homography-based pixel → GPS mapping                                                              |
+| Camera Emulator | Python + OpenCV MJPEG server                                                                             |
+| Database | SQLite (via Python `sqlite3`)                                                                            |
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                      Camera Sources                          │
-│   IP cameras / USB cameras / MJPEG emulator (test videos)   │
-└────────────────────────┬─────────────────────────────────────┘
-                         │ MJPEG stream
-                         ▼
+┌─────────────────────────────┐   ┌──────────────────────────────┐
+│        Video Sources        │   │    Environmental Sensors      │
+│  Surveillance cameras       │   │  Temperature / Humidity /     │
+│  Web cameras / USB cameras  │   │  Rain / other via ESP32      │
+│  Drone footage              │   │                              │
+│  MJPEG emulator (testing)   │   │                              │
+└─────────────┬───────────────┘   └──────────────┬───────────────┘
+              │ MJPEG stream                      │ HTTP / MQTT
+              ▼                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                     Backend (Flask)                          │
 │                                                              │
 │  CameraStream ──► Detector (YOLO11 + ByteTrack)             │
 │                          │                                   │
+│  ESP32 Sensor Client ────┤                                   │
+│  (env data ingestion)    │                                   │
 │                    ZoneChecker                               │
 │                  (polygon hit-test + GPS projection)         │
 │                          │                                   │
 │                    AlertManager                              │
 │                  (severity, dedup, dispatch)                 │
 │                          │                                   │
-│              ┌───────────┴────────────┐                      │
-│          MQTT Broker           WebSocket (SocketIO)          │
-└──────────────┬─────────────────────────┬────────────────────┘
-               │                         │
-        IoT Actuators             React Dashboard
-     (buzzers, lights…)        (live map + alert feed)
+│              ┌───────────┼────────────┐                      │
+│          MQTT Broker      │     WebSocket (SocketIO)         │
+└──────────────┬────────────┼───────────┬────────────────────┘
+               │            │           │
+        IoT Actuators   LED Lights   React Dashboard
+     (buzzers, etc.)  (runway LEDs)  (live map + alert feed)
 ```
+
+---
+
+## Data Inputs
+
+The system collects data from multiple sources:
+
+- **Video feeds** — live streams from surveillance cameras, web cameras, and drone footage, ingested as MJPEG streams
+- **Environmental sensors** — temperature, humidity, rain, and other compatible sensors connected via ESP32 nodes over HTTP/MQTT
+- **LED lighting controls** — LED lights installed near the runway can be activated when a threat is detected; currently supports a single indicator, expandable to multiple lights with dynamic control
 
 ---
 
@@ -85,7 +111,7 @@ Runway incursions — birds, stray animals, forgotten equipment — cause catast
 - Node.js 18+
 - (Optional) Docker for Dev Container
 
-### Backend
+### App
 
 ```bash
 cd backend
@@ -94,16 +120,6 @@ pip install -r requirements.txt
 # or
 python app.py     # dev server with hot reload
 ```
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm start    # dev server on :3000, proxies /api to :8081
-```
-
-Then open **http://localhost:3000**.
 
 ### Camera Emulator (for testing without physical cameras)
 
@@ -174,7 +190,6 @@ WebSocket events are emitted on `detection` and `alert` channels via Socket.IO.
 
 | Service | Port |
 |---|---|
-| Frontend | 3000 |
 | Backend API | 8081 |
 | Camera Emulator | 8554 |
 | MQTT Broker | 1883 |
@@ -213,8 +228,6 @@ backend/
   zones.json           Zone + GPS calibration config
   run.sh               Gunicorn startup script
   run_mqtt_broker.sh   Mosquitto startup script
-frontend/
-  src/App.js           Main React dashboard
 cam_emulator/
   emulator.py          MJPEG emulator server
 models_testing/        Standalone ML experiments
@@ -231,13 +244,9 @@ esp/                   ESP32 firmware / config
 - **External data fusion** — cross-reference employee GPS data to reduce false positives
 - **LiDAR integration** — depth sensing for fog and night conditions
 - **Custom training** — fine-tune on airport-specific datasets (debris, ground vehicles, local bird species)
-- **Restricted area photo detection** — detect person + phone combinations near sensitive areas
+- **Restricted area photo detection** — detect person + phone combinations near sensitive areas using a Grounding DINO model
+- **Multi-LED runway lighting** — dynamically activate specific runway LED segments closest to the detected threat
+- **Weather-aware detection** — adjust detection thresholds and alert severity based on real-time environmental sensor data
+- **ADS-B correlation** — ingest aircraft transponder data to suppress alerts during expected operations
+- **Historical heatmaps** — aggregate detection data over time to identify recurring hotspots and seasonal patterns
 
----
-
-## Demo
-
-> Video: _[link to be added]_
-
-Built at **HackTech Oradea 2026** — Challenge: *Automatic Hazard Detection*
-`#MLSpecialists` `#ComputerVision` `#AerospaceEngineers`
