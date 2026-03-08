@@ -42,6 +42,9 @@ cameras: dict[str, CameraStream] = {}
 _cameras_started = False
 
 YOLO_MODEL = os.environ.get("YOLO_MODEL_PATH", "yolo11n-seg.pt")
+USE_SAHI = os.environ.get("USE_SAHI", "false").lower() in ("true", "1", "yes")
+SAHI_SLICE_SIZE = int(os.environ.get("SAHI_SLICE_SIZE", "640"))
+SAHI_OVERLAP = float(os.environ.get("SAHI_OVERLAP", "0.2"))
 MQTT_BROKER_HOST = os.environ.get("MQTT_BROKER_HOST", "localhost")
 MQTT_BROKER_PORT = int(os.environ.get("MQTT_BROKER_PORT", "1883"))
 SOURCE_IP = os.environ.get("SOURCE_IP", None)  # auto-detected if not set
@@ -122,16 +125,21 @@ def start_cameras():
     )
 
     try:
-        _test_detector = Detector(YOLO_MODEL)
+        _test_detector = Detector(YOLO_MODEL, use_sahi=USE_SAHI,
+                                  sahi_slice_size=SAHI_SLICE_SIZE,
+                                  sahi_overlap=SAHI_OVERLAP)
         del _test_detector
-        print(f"[yolo] Model ready: {YOLO_MODEL}")
+        sahi_label = " + SAHI" if USE_SAHI else ""
+        print(f"[yolo] Model ready: {YOLO_MODEL}{sahi_label}")
         yolo_ok = True
     except Exception as e:
         print(f"[yolo] Could not load model ({YOLO_MODEL}): {e}")
         yolo_ok = False
 
     for cam_id, cfg in CAMERA_CONFIG.items():
-        detector = Detector(YOLO_MODEL) if yolo_ok else None
+        detector = Detector(YOLO_MODEL, use_sahi=USE_SAHI,
+                            sahi_slice_size=SAHI_SLICE_SIZE,
+                            sahi_overlap=SAHI_OVERLAP) if yolo_ok else None
         cam = CameraStream(camera_id=cam_id, url=cfg["url"], video_dir="videos",
                            buffer_seconds=45, detector=detector,
                            detections_db=_detections_db,
