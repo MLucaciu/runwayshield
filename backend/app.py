@@ -527,6 +527,24 @@ def live_stream(camera_id):
 
 
 # ---------------------------------------------------------------------------
+# API 0 — Snapshot (single JPEG frame, no persistent connection)
+# GET /api/stream/<camera_id>/snapshot
+# Used for thumbnails to avoid holding permanent browser HTTP connections.
+# ---------------------------------------------------------------------------
+
+@app.route("/api/stream/<camera_id>/snapshot")
+def snapshot(camera_id):
+    cam = cameras.get(camera_id)
+    if not cam:
+        return jsonify({"error": "Camera not found"}), 404
+    jpeg = cam.get_latest_jpeg()
+    if not jpeg:
+        return jsonify({"error": "No frame available"}), 503
+    return Response(jpeg, mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+# ---------------------------------------------------------------------------
 # API 2 — Historical playback (MP4 segment by unix timestamp)
 # GET /api/stream/<camera_id>/history?t=<unix_timestamp>
 #   Returns the MP4 segment that covers the given timestamp.

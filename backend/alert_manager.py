@@ -198,7 +198,7 @@ class AlertManager:
     def acknowledge(self, alert_id, username):
         """Acknowledge an alert. Returns the updated alert dict or None."""
         result = self._db.acknowledge(alert_id, username)
-        if result and self._mqtt:
+        if result:
             self._publish("alert_acknowledged", result)
         return result
 
