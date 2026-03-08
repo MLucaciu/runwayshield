@@ -28,6 +28,7 @@ Runway incursions — birds, stray animals, forgotten equipment — cause catast
 ## Features
 
 - **Real-time object detection** — YOLO11 with ByteTrack multi-object tracking on live camera feeds
+- **SAHI (Slicing Aided Hyper Inference)** — sliced inference for detecting small objects (distant birds, FOD) that standard full-frame detection misses
 - **Configurable surveillance zones** — define polygon zones per camera with per-zone severity and alert rules
 - **GPS coordinate mapping** — pixel detections projected to real-world GPS coordinates via camera calibration (homography)
 - **Multi-camera support** — simultaneous live feeds from multiple runway cameras
@@ -46,6 +47,7 @@ Runway incursions — birds, stray animals, forgotten equipment — cause catast
 |---|----------------------------------------------------------------------------------------------------------|
 | Object Detection | [Ultralytics YOLO11 / YOLO26](https://github.com/ultralytics/ultralytics) (yolo11n-seg, yolo26 variants) |
 | Object Tracking | ByteTrack (via Ultralytics)                                                                              |
+| Small Object Detection | [SAHI](https://github.com/obss/sahi) — sliced inference over high-res frames                           |
 | Backend API | Python 3.11, Flask 3.1, Flask-SocketIO                                                                   |
 | Production Server | Gunicorn (gthread, 1 worker, 16 threads)                                                                 |
 | Camera Ingestion | OpenCV (`cv2`), MJPEG streams                                                                            |
