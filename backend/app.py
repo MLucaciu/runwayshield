@@ -459,6 +459,8 @@ def _draw_zones_on_jpeg(jpeg_bytes, camera_id):
 
     overlay = frame.copy()
     for zone in zones:
+        if zone["polygon"] == "all":
+            continue
         pts = np.array(zone["polygon"], dtype=np.int32)
         color = _ZONE_COLORS.get(zone.get("severity_override"), _ZONE_COLORS[None])
         cv2.fillPoly(overlay, [pts], color)

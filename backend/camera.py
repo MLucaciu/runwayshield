@@ -60,6 +60,7 @@ class CameraStream:
         self._zone_checker = zone_checker
         self._alert_manager = alert_manager
         self._notified_tracks = set()
+        self._alerted_track_ids: set = set()  # track IDs with active alerts/warnings
         self.fps = None  # measured on start
         self.buffer_seconds = buffer_seconds
         self.segment_seconds = segment_seconds
@@ -264,7 +265,9 @@ class CameraStream:
                 continue
 
             try:
-                annotated, detections = self._detector.process(frame)
+                annotated, detections = self._detector.process(
+                    frame, alerted_track_ids=self._alerted_track_ids
+                )
             except Exception as e:
                 print(f"[detector] {self.camera_id} error: {e}")
                 time.sleep(1.0)
@@ -325,6 +328,14 @@ class CameraStream:
                     self._alert_manager.process_frame(
                         self.camera_id, violations, warnings=warnings
                     )
+                    # Update alerted track IDs for next frame's annotation filter
+                    self._alerted_track_ids = {
+                        v["track_id"] for v in violations
+                        if v.get("track_id") is not None
+                    } | {
+                        w["track_id"] for w in warnings
+                        if w.get("track_id") is not None
+                    }
                 except Exception as e:
                     print(f"[detector] {self.camera_id} zone alert error: {e}")
 

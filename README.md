@@ -1,143 +1,243 @@
 # Runway Shield
 
-Airport runway monitoring and hazard detection system — HackTech Oradea.
+> Real-time runway hazard detection — built at HackTech Oradea 2026.
 
-Uses YOLO object detection with ByteTrack tracking on live camera feeds to detect runway hazards, with a Flask API backend and React frontend dashboard.
+Runway Shield uses computer vision and object tracking to automatically detect birds, animals, people, and foreign object debris (FOD) on airport runways, alerting ground control in real time before accidents happen.
 
-## Prerequisites
+---
 
-- **Python 3.10+** — [python.org/downloads](https://www.python.org/downloads/)
-- **Node.js 18+** — [nodejs.org](https://nodejs.org/)
-- **FFmpeg** — required for video segment recording
-- (Optional) [Docker](https://docs.docker.com/get-docker/) for the Dev Container
+## The Problem
 
-### YOLO Model
+Runway incursions — birds, stray animals, forgotten equipment — cause catastrophic accidents every year. Today, airports rely heavily on human eyes to patrol runways. This is slow, expensive, and error-prone, especially at night or in poor visibility.
 
-Download the YOLO11n segmentation model and place it in the `backend/` directory (or project root):
+**Runway Shield automates this entirely.**
 
-```bash
-cd backend
-# Download yolo11n-seg.pt from Ultralytics
-# https://docs.ultralytics.com/models/yolo11/
+---
+
+## Features
+
+- **Real-time object detection** — YOLO11 with ByteTrack multi-object tracking on live camera feeds
+- **Configurable surveillance zones** — define polygon zones per camera with per-zone severity and alert rules
+- **GPS coordinate mapping** — pixel detections projected to real-world GPS coordinates via camera calibration (homography)
+- **Multi-camera support** — simultaneous live feeds from multiple runway cameras
+- **Severity-tiered alerts** — low / medium / high, with per-zone action dispatch (e.g., buzzer trigger via MQTT)
+- **Live WebSocket dashboard** — detections and alerts pushed to a React dashboard in real time
+- **MQTT integration** — publish alerts to an IoT message broker to trigger physical actuators
+- **ESP32 sensor integration** — connect hardware sensor nodes for additional environmental data
+- **Camera emulator** — replay pre-recorded `.mp4` files as live MJPEG streams for testing without physical cameras
+- **Persistent history** — detections, alerts, and notifications stored in SQLite
+
+---
+
+## Technical Stack
+
+| Layer | Technology |
+|---|---|
+| Object Detection | [Ultralytics YOLO11](https://github.com/ultralytics/ultralytics) (yolo11n-seg, yolo26 variants) |
+| Object Tracking | ByteTrack (via Ultralytics) |
+| Backend API | Python 3.11, Flask 3.1, Flask-SocketIO |
+| Production Server | Gunicorn (gthread, 1 worker, 16 threads) |
+| Camera Ingestion | OpenCV (`cv2`), MJPEG streams |
+| Messaging | MQTT (Paho), WebSockets (Socket.IO) |
+| Hardware | ESP32 sensor nodes |
+| Frontend Dashboard | React 19, WebSockets |
+| GPS Projection | Custom homography-based pixel → GPS mapping |
+| Camera Emulator | Python + OpenCV MJPEG server |
+| Database | SQLite (via Python `sqlite3`) |
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      Camera Sources                          │
+│   IP cameras / USB cameras / MJPEG emulator (test videos)   │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ MJPEG stream
+                         ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     Backend (Flask)                          │
+│                                                              │
+│  CameraStream ──► Detector (YOLO11 + ByteTrack)             │
+│                          │                                   │
+│                    ZoneChecker                               │
+│                  (polygon hit-test + GPS projection)         │
+│                          │                                   │
+│                    AlertManager                              │
+│                  (severity, dedup, dispatch)                 │
+│                          │                                   │
+│              ┌───────────┴────────────┐                      │
+│          MQTT Broker           WebSocket (SocketIO)          │
+└──────────────┬─────────────────────────┬────────────────────┘
+               │                         │
+        IoT Actuators             React Dashboard
+     (buzzers, lights…)        (live map + alert feed)
 ```
 
-If the model file is not present, the app starts normally with detection disabled.
-Set `YOLO_MODEL_PATH` to override the default path.
+---
 
-## Getting started
+## Getting Started
 
-```bash
-git clone <repo-url>
-cd runwayshield
-```
+### Prerequisites
 
-### Option A — Run locally
+- Python 3.10+
+- Node.js 18+
+- (Optional) Docker for Dev Container
 
-#### 1. Backend
+### Backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
-python app.py          # dev server on :8081
-
-# or production:
-./run.sh               # gunicorn on :8081
+./run.sh          # production (gunicorn on :8081)
+# or
+python app.py     # dev server with hot reload
 ```
 
-#### 2. Frontend
+### Frontend
 
 ```bash
 cd frontend
 npm install
-npm start              # dev server on :3000, proxies /api to :8081
+npm start    # dev server on :3000, proxies /api to :8081
 ```
 
-#### 3. Open the app
+Then open **http://localhost:3000**.
 
-Go to **http://localhost:3000**.
-
----
-
-### Option B — Dev Container (Docker)
-
-1. Open in VS Code / Cursor
-2. **Dev Containers: Reopen in Container**
-3. Backend: `cd /workspace/backend && python app.py`
-4. Frontend: `cd /workspace/frontend && npm start`
-5. Open **http://localhost:3000**
-
----
-
-## API Endpoints
-
-| Endpoint | Description |
-|---|---|
-| `GET /api/status` | System health check |
-| `GET /api/cameras` | List cameras with status and detection info |
-| `GET /api/stream/<id>/live` | Live MJPEG stream. `?annotated=1` for YOLO overlay, `?offset=N` for N-second delay |
-| `GET /api/stream/<id>/history?t=<unix>` | Historical MP4 segment. `?annotated=1` for annotated version |
-| `GET /api/detections/<id>` | Query detection history from SQLite. `?limit=N`, `?from=<iso>`, `?to=<iso>` |
-| `GET /api/notifications/history` | Alert history |
-| `GET /api/notifications/live` | Live alerts |
-| `GET /api/airport-info` | Airport and runway metadata |
-
-### Camera Emulator (optional)
-
-Loops a video file as an MJPEG stream to emulate a live camera. See [`cam_emulator/README.md`](cam_emulator/README.md) for details.
+### Camera Emulator (for testing without physical cameras)
 
 ```bash
 cd cam_emulator
 pip install -r requirements.txt
-./run.sh               # MJPEG stream on :8554
-
-# Then point the backend at it:
-CAMERA_1_URL=http://localhost:8554/video
+./run.sh     # serves test .mp4 files as MJPEG streams on :8554
 ```
 
-## Running tests
+Point the backend at the emulator:
+```bash
+CAMERA_1_URL=http://localhost:8554/video python app.py
+```
+
+### MQTT Broker
 
 ```bash
-cd backend && pytest
-cd frontend && npm test
+cd backend
+./run_mqtt_broker.sh   # starts Mosquitto with local config
 ```
 
-## Project structure
+---
 
+## Zone Configuration
+
+Zones are defined in `backend/zones.json`. Each camera can have multiple polygonal zones with independent alert rules:
+
+```json
+{
+  "camera_1": {
+    "gps_corners": {
+      "top_left":     {"px": [0, 463],    "gps": [47.028247, 21.901027]},
+      "bottom_right": {"px": [1920, 1080],"gps": [47.028134, 21.899483]}
+    },
+    "zones": [
+      {
+        "id": "runway_critical",
+        "name": "Runway Critical Zone",
+        "polygon": [[200, 400], [1700, 400], [1700, 900], [200, 900]],
+        "severity_override": "high",
+        "action": "buzzer"
+      }
+    ]
+  }
+}
 ```
-backend/
-  app.py              Flask API server
-  camera.py           Camera capture, ring buffer, segment recording
-  detector.py         YOLO segmentation + ByteTrack wrapper
-  detections_db.py    SQLite storage for detections
-  run.sh              Gunicorn startup script
-  requirements.txt    Python dependencies
-  data/               SQLite database (auto-created, gitignored)
-  videos/             Video segments (auto-created, gitignored)
-  tests/              Pytest tests
-frontend/
-  src/App.js          Main React dashboard component
-  src/                Components & styles
-  public/             Static assets
-cam_emulator/         Standalone MJPEG camera emulator (loops a video file)
-models_testing/       Standalone ML experiments
-.devcontainer/        Dev Container config
-```
+
+---
+
+## API Reference
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/status` | System status and camera states |
+| `GET` | `/api/cameras` | List active cameras |
+| `GET` | `/api/detections` | Recent detections with GPS coords |
+| `GET` | `/api/alerts` | Recent alerts |
+| `GET` | `/api/stream/<camera_id>` | Live MJPEG stream with YOLO overlay |
+| `POST` | `/api/cameras/<id>/start` | Start a camera |
+| `POST` | `/api/cameras/<id>/stop` | Stop a camera |
+| `GET` | `/api/notifications/history` | Alert history |
+
+WebSocket events are emitted on `detection` and `alert` channels via Socket.IO.
+
+---
 
 ## Ports
 
-| Service  | Port | URL                  |
-|----------|------|----------------------|
-| Frontend       | 3000 | http://localhost:3000 |
-| Backend        | 8081 | http://localhost:8081 |
-| Cam Emulator   | 8554 | http://localhost:8554 |
+| Service | Port |
+|---|---|
+| Frontend | 3000 |
+| Backend API | 8081 |
+| Camera Emulator | 8554 |
+| MQTT Broker | 1883 |
+
+---
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `8081` | Backend server port |
+| `CAMERA_1_URL` | `0` (webcam) | Camera 1 stream URL or device index |
+| `CAMERA_2_URL` | `http://...` | Camera 2 MJPEG stream URL |
+| `YOLO_MODEL_PATH` | `yolo11n-seg.pt` | Path to YOLO model weights |
+| `MQTT_BROKER_HOST` | `localhost` | MQTT broker hostname |
+| `MQTT_BROKER_PORT` | `1883` | MQTT broker port |
+| `PORT` | `8081` | Server listen port |
 | `WORKERS` | `1` | Gunicorn workers (keep at 1) |
 | `THREADS` | `16` | Gunicorn threads |
-| `YOLO_MODEL_PATH` | `yolo11n-seg.pt` | Path to YOLO model file |
-| `CAMERA_1_URL` | `0` | Camera 1 source (device index or URL) |
-| `CAMERA_2_URL` | `http://10.1.0.74:8080/video` | Camera 2 source |
+
+---
+
+## Project Structure
+
+```
+backend/
+  app.py               Flask API server + Socket.IO
+  camera.py            Camera capture thread
+  detector.py          YOLO11 + ByteTrack wrapper
+  zone_checker.py      Polygon zone hit-test + GPS projection
+  alert_manager.py     Alert dedup, severity, action dispatch
+  mqtt_client.py       MQTT publisher
+  esp_sensor_client.py ESP32 sensor integration
+  detections_db.py     SQLite detections store
+  alerts_db.py         SQLite alerts store
+  notifications_db.py  SQLite notifications store
+  zones.json           Zone + GPS calibration config
+  run.sh               Gunicorn startup script
+  run_mqtt_broker.sh   Mosquitto startup script
+frontend/
+  src/App.js           Main React dashboard
+cam_emulator/
+  emulator.py          MJPEG emulator server
+models_testing/        Standalone ML experiments
+esp/                   ESP32 firmware / config
+```
+
+---
+
+## Future Improvements
+
+- **Trajectory pre-alert** — warn before an object enters a critical zone based on movement vector
+- **Telegram bot** — push critical alerts directly to ground control staff phones
+- **VLM reasoning** — use past detection history to predict likely threats
+- **External data fusion** — cross-reference employee GPS data to reduce false positives
+- **LiDAR integration** — depth sensing for fog and night conditions
+- **Custom training** — fine-tune on airport-specific datasets (debris, ground vehicles, local bird species)
+- **Restricted area photo detection** — detect person + phone combinations near sensitive areas
+
+---
+
+## Demo
+
+> Video: _[link to be added]_
+
+Built at **HackTech Oradea 2026** — Challenge: *Automatic Hazard Detection*
+`#MLSpecialists` `#ComputerVision` `#AerospaceEngineers`

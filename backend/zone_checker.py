@@ -70,6 +70,8 @@ class ZoneChecker:
         self._expanded_cache = {}
         for cam_id, cam_cfg in self._config.items():
             for zone in cam_cfg.get("zones", []):
+                if zone["polygon"] == "all":
+                    continue
                 key = f"{cam_id}:{zone['id']}"
                 self._expanded_cache[key] = _expand_polygon(
                     zone["polygon"], self.PROXIMITY_EXPAND
@@ -111,12 +113,15 @@ class ZoneChecker:
                 tags = zone.get("tags")
                 if tags and det["class_name"] not in tags:
                     continue
-                if _point_in_polygon(bx, by, zone["polygon"]):
+                polygon = zone["polygon"]
+                in_zone = polygon == "all" or _point_in_polygon(bx, by, polygon)
+                if in_zone:
                     lat, lng = pixel_to_gps(bx, by, gps_corners)
                     violations.append({
                         "zone_id": zone["id"],
                         "zone_name": zone.get("name", zone["id"]),
                         "object_type": det["class_name"],
+                        "track_id": det.get("track_id"),
                         "bbox": bbox,
                         "gps_lat": lat,
                         "gps_lng": lng,
@@ -154,6 +159,10 @@ class ZoneChecker:
                 if (zone_id, det["class_name"]) in violation_keys:
                     continue
 
+                # "all" zones always produce violations, never proximity warnings
+                if zone["polygon"] == "all":
+                    continue
+
                 if _point_in_polygon(bx, by, zone["polygon"]):
                     continue
 
@@ -169,6 +178,7 @@ class ZoneChecker:
                     "zone_id": zone_id,
                     "zone_name": zone.get("name", zone_id),
                     "object_type": det["class_name"],
+                    "track_id": det.get("track_id"),
                     "bbox": bbox,
                     "gps_lat": lat,
                     "gps_lng": lng,
